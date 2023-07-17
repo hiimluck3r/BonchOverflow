@@ -1,6 +1,9 @@
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.utils.exceptions import BotBlocked
+from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from dotenv import load_dotenv
 import psycopg2
 import logging
@@ -9,12 +12,19 @@ import os
 load_dotenv()
 
 API_TOKEN = os.environ.get('API_TOKEN')
+HOST = os.environ.get('HOST')
+DB = os.environ.get('DB')
+USER = os.environ.get('USER')
+PWD = os.environ.get('PWD')
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+
 flag = True
 while flag:
     try:
-        conn = psycopg2.connect(dbname='test_db', user='root', password='root', host='db')
+        conn = psycopg2.connect(dbname=DB, user=USER, password=PWD, host=HOST)
         print('Connection to database is established')
         flag = False
     except Exception as e:
@@ -23,6 +33,10 @@ while flag:
 greet = 'Привет и добро пожаловать в BonchOverflow! \n\nЗдесь ты можешь задать интересующие тебя вопросы, касающиеся университета и не только. \n\nИспользуя этого бота вы соглашаетесь с правилами эксплуатации BonchOverflow. Ознакомиться с правилами вы можете в пункте "Правила".'
 
 logging.basicConfig(level=logging.INFO)
+
+class AskQuestion(StatesGroup):
+    header = State()
+    question = State()
 
 async def get_username(user_id):
     try:
@@ -78,9 +92,71 @@ async def your_questions(message: types.Message):
     keyboard.add(*buttons)
     buttons = ["Главное меню"]
     keyboard.add(*buttons)
+
     await message.answer("Здесь вы можете задать вопрос или просмотреть активные на данный момент.\n\n"
                          "Одновременно могут быть активными не более 5 вопросов!", reply_markup=keyboard, parse_mode=types.ParseMode.HTML)
 
+@dp.message_handler(Text(equals="Задать вопрос"))
+async def ask_question(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(*['Отмена'])
+
+    await AskQuestion.header.set()
+
+    await message.reply("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
+
+@dp.message_handler(state='*', commands='cancel')
+@dp.message_handler(Text(equals='отмена', ignore_case=True), state='*')
+async def cancel_handler(message: types.Message, state: FSMContext):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(*['Главное меню'])
+
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    logging.info('Cancelling state %r', current_state)
+    await state.finish()
+
+    await message.reply('Ввод данных остановлен. Вернёмся в мёню?', reply_markup=keyboard)
+
+@dp.message_handler(lambda message: len(message.text)>64, state=AskQuestion.header)
+async def process_header_invalid(message: types.Message):
+    return await message.reply("Длина заголовка не должна превышать 64 символа.")
+@dp.message_handler(state=AskQuestion.header)
+async def process_header(message: types.Message, state: FSMContext):
+
+    async with state.proxy() as data:
+        data['header'] = message.text
+
+    await AskQuestion.next()
+    await message.reply("Введите текст вопроса:")
+
+@dp.message_handler(lambda message: len(message.text)>3500, state=AskQuestion.question)
+async def process_question_invalid(message: types.Message):
+    return await message.reply("Длина вопроса не должна превышать 3500 символов.")
+
+@dp.message_handler(state=AskQuestion.question)
+async def process_header(message: types.Message, state: FSMContext):
+
+    async with state.proxy() as data:
+        data['question'] = message.text
+
+    await state.finish()
+
+    userid = message.from_user.id
+    username = await get_username(userid)
+
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '');")
+    conn.commit()
+    cursor.close()
+
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(*['Главное меню'])
+    await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
+                        "<b>"+data['header']+"</b>\n"
+                                             "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 @dp.message_handler(Text(equals="Активные вопросы"))
 async def user_questions(message: types.Message):
     userid = message.from_user.id
@@ -126,6 +202,8 @@ async def query_handler(call: types.CallbackQuery):
         cursor.execute('SELECT * FROM public.solutions WHERE questionid = ' + call_data+";")
         data = cursor.fetchall()
         cursor.close()
+        if len(data) == 0:
+            await bot.send_message(chat_id=call.from_user.id, text='На данный момент нет ответа на этот вопрос.\n\nВы можете закрыть вопрос самостоятельно через вкладку "Открытые вопросы".')
         for row in data:
             username = await get_username(int(row[2]))
             form_text = "<b>Решение "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
