@@ -150,7 +150,7 @@ async def query_handler(call: types.CallbackQuery):
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
 
     else:
-        print("Unauthorized data:", call.data)
+        print("Unauthorized data:", call.data) #я обязательно заменю if на match case, наверное.
         pass
 """
 Блок кода с открытыми вопросами и действиями над ними.
