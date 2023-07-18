@@ -322,7 +322,7 @@ async def open_questions(message: types.Message):
 @dp.callback_query_handler(Text(startswith="open_"))
 async def open_questions_handler(call: types.CallbackQuery):
     global userData
-    global page
+    global page #to_do: add functional for answering
 
     action = call.data.split("_")[1]
     try:
