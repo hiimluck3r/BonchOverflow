@@ -11,7 +11,7 @@ import os
 
 load_dotenv()
 
-API_TOKEN = os.environ.get('API_TOKEN')
+API_TOKEN = os.environ.get('API_TOKEN') #всё в .env
 HOST = os.environ.get('HOST')
 DB = os.environ.get('DB')
 USER = os.environ.get('USER')
@@ -21,10 +21,39 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
+
+userData = []
+page = [0]
+
+def get_keyboard_navigation(big_button, questionid, solutionid): #чувствую, что переход к такой навигации приведёт меня к боли и страданиям
+    if big_button == 'answer_nav': #кнопки навигации в "открытых вопросах"
+        buttons = [
+            types.InlineKeyboardButton(text='⬅️', callback_data='open_goback'),
+            types.InlineKeyboardButton(text='➡️', callback_data='open_goforward'),
+            types.InlineKeyboardButton(text='Ответить', callback_data='open_answer.'+str(questionid))
+        ]
+    elif big_button == 'active_nav': #кнопки навигации в "активных вопросах" пользователя
+        buttons = [
+            types.InlineKeyboardButton(text='⬅️', callback_data='active_goback.'+str(questionid)),
+            types.InlineKeyboardButton(text='➡️', callback_data='active_goforward.'+str(questionid)),
+            types.InlineKeyboardButton(text='Отметить как решение', callback_data='active_clthr.'+str(questionid)+'.'+str(solutionid))
+        ]
+    elif big_button == 'closed_nav': #кнопки навигации в "закрытых вопросах"
+        buttons = [
+            types.InlineKeyboardButton(text='⬅️', callback_data='closed_goback'),
+            types.InlineKeyboardButton(text='➡️', callback_data='closed_goforward')
+        ]
+    else: #на всякий, чтобы ловить неопознанные кнопки в ходе разработки
+        print('Unknown button type:', big_button)
+        return None
+    keyboard = types.InlineKeyboardMarkup(row_width=2)
+    keyboard.add(*buttons)
+    return keyboard
+
 flag = True
 while flag:
     try:
-        conn = psycopg2.connect(dbname=DB, user=USER, password=PWD, host=HOST)
+        conn = psycopg2.connect(dbname=DB, user=USER, password=PWD, host=HOST) #указывать в .env
         print('Connection to database is established')
         flag = False
     except Exception as e:
@@ -132,9 +161,9 @@ async def process_header(message: types.Message, state: FSMContext):
     await AskQuestion.next()
     await message.reply("Введите текст вопроса:")
 
-@dp.message_handler(lambda message: len(message.text)>3500, state=AskQuestion.question)
+@dp.message_handler(lambda message: len(message.text)>1250, state=AskQuestion.question)
 async def process_question_invalid(message: types.Message):
-    return await message.reply("Длина вопроса не должна превышать 3500 символов.")
+    return await message.reply("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
 
 @dp.message_handler(state=AskQuestion.question)
 async def process_header(message: types.Message, state: FSMContext):
@@ -177,42 +206,54 @@ async def user_questions(message: types.Message):
     else:
         await message.answer("На данный момент нет активных вопросов.")
 
-@dp.callback_query_handler()
-async def query_handler(call: types.CallbackQuery):
-    if "act." in call.data: #act. - активный вопрос (active). Ищем в db questions
-        call_data = call.data[4::]
-        print(call_data)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM public.questions WHERE id = '+ call_data+";")
-        data = cursor.fetchone()
-        cursor.close()
-        header = data[2]
-        question_text = data[3]
-        form_text = "<b>"+str(header)+"</b>\n\n" \
-                        "Статус: открыт\n" \
-                        "Текст: "+str(question_text)+"\n\n" \
-                        "Желаете рассмотреть предложенные ответы?"
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(types.InlineKeyboardButton(text="Да", callback_data="sol."+call_data))
-        await bot.send_message(chat_id=call.from_user.id,text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+@dp.callback_query_handler(Text(startswith="act.")) #act. - активный вопрос (active). Ищем в db questions
+async def active_questions_handler(call: types.CallbackQuery):
+    call_data = call.data[4::]
+    print(call_data)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM public.questions WHERE id = '+ call_data+";")
+    data = cursor.fetchone()
+    cursor.close()
+    header = data[2]
+    question_text = data[3]
+    form_text = "<b>"+str(header)+"</b>\n\n" \
+                    "Статус: открыт\n" \
+                    "Текст: "+str(question_text)+"\n\n" \
+                    "Желаете рассмотреть предложенные ответы?"
+    keyboard = types.InlineKeyboardMarkup()
+    keyboard.add(types.InlineKeyboardButton(text="Да", callback_data="sol."+call_data))
+    await bot.send_message(chat_id=call.from_user.id,text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
-    elif "sol." in call.data: #sol. - ответ (solutions). Ищем в db solutions.
-        call_data = call.data[4::]
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM public.solutions WHERE questionid = ' + call_data+";")
-        data = cursor.fetchall()
-        cursor.close()
-        if len(data) == 0:
-            await bot.send_message(chat_id=call.from_user.id, text='На данный момент нет ответа на этот вопрос.\n\nВы можете закрыть вопрос самостоятельно через вкладку "Открытые вопросы".')
-        for row in data:
-            username = await get_username(int(row[2]))
-            form_text = "<b>Решение "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton(text='Отметить как решение вопроса', callback_data="clthr."+call_data+"."+str(row[2])))
-            await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+async def update_question_text(message: types.Message, new_text: str, big_button: str, questionid: int, solverid: int):
+    await message.edit_text(f"{new_text}", reply_markup=get_keyboard_navigation(big_button, questionid, solverid), parse_mode=types.ParseMode.HTML)
 
-    elif "clthr." in call.data: #clthr - закрытый вопрос (Close Thread). Ищем в solutions ответ и автора, в questions вносим автора и меняем на closed.
-        data = call.data[6::].split('.')
+@dp.callback_query_handler(Text(startswith="sol.")) #sol. - ответ (solutions). Ищем в db solutions.
+async def active_solutions_handler(call: types.CallbackQuery):
+    global userData
+    global page
+    call_data = call.data[4::]
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM public.solutions WHERE questionid = ' + call_data+";")
+    userData = cursor.fetchall()
+    cursor.close()
+    if len(userData) == 0:
+        await bot.send_message(chat_id=call.from_user.id, text='На данный момент нет ответа на этот вопрос.\n\nВы можете ответить на вопрос самостоятельно через вкладку "Открытые вопросы", а после закрыть его.')
+    else:
+        page = 0 #начиная с этого момента, Бог отказался от того, чтобы помогать мне в написании этого кода
+        row = userData[page]
+        username = await get_username(int(row[2]))
+        form_text = f"<b>Решение №{page+1}, автор: "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
+        keyboard = get_keyboard_navigation('active_nav', call_data, row[page])
+        await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+
+@dp.callback_query_handler(Text(startswith="active_")) #clthr - закрытый вопрос (Close Thread). Ищем в solutions ответ и автора, в questions вносим автора и меняем на closed.
+async def active_nav_handler(call: types.CallbackQuery):
+    global userData
+    global page
+    print(call.data)
+    call_data = call.data.split("_")[1]
+    if 'clthr.' in call_data:
+        data = call_data[6::].split('.')
         questionid = data[0]
         solverid = data[1]
         cursor = conn.cursor()
@@ -228,12 +269,33 @@ async def query_handler(call: types.CallbackQuery):
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
 
     else:
-        print("Unauthorized data:", call.data) #я обязательно заменю if на match case, наверное.
-        pass
+        action, questionid = call_data.split('.')
+        questionid = int(questionid)
+        try:
+            if action == 'goback':
+                page -= 1
+                row = userData[page]
+                username = await get_username(int(row[2]))
+                form_text = f"<b>Решение №{page + 1}, автор: " + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
+
+            elif action == 'goforward':
+                page += 1
+                row = userData[page]
+                username = await get_username(int(row[2]))
+                form_text = f"<b>Решение №{page + 1}, автор: " + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
+        except Exception as e: #я не имею ни малейшего понятия, как это дебажить через месяц, но оно выглядит красиво
+            print("Found an exception:", e)
+    await call.answer()
 """
 Блок кода с открытыми вопросами и действиями над ними.
 """
-
+#@dp.message_handler(Text(equals="Открытые вопросы"))
+#async def open_questions(message: types.Message):
+    #показать все активные вопросы по ID?
+    #одна функция для закрытых и открытых вопросов?
+    #unauthorized для закрытых?
 """
 Блок кода с закрытыми вопросами и действиями над ними.
 """
