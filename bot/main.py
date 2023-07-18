@@ -26,7 +26,7 @@ userData = []
 page = [0]
 
 def get_keyboard_navigation(big_button, questionid, solutionid): #чувствую, что переход к такой навигации приведёт меня к боли и страданиям
-    if big_button == 'answer_nav': #кнопки навигации в "открытых вопросах"
+    if big_button == 'open_nav': #кнопки навигации в "открытых вопросах"
         buttons = [
             types.InlineKeyboardButton(text='⬅️', callback_data='open_goback'),
             types.InlineKeyboardButton(text='➡️', callback_data='open_goforward'),
@@ -129,10 +129,15 @@ async def your_questions(message: types.Message):
 async def ask_question(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add(*['Отмена'])
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM questions WHERE userid = '+str(message.from_user.id)+";")
+    questions = cursor.fetchall()
+    if len(questions) < 5:
+        await AskQuestion.header.set()
 
-    await AskQuestion.header.set()
-
-    await message.reply("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
+        await message.reply("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
+    else:
+        await message.reply("Достигнут лимит открытых вопросов.")
 
 @dp.message_handler(state='*', commands='cancel')
 @dp.message_handler(Text(equals='отмена', ignore_case=True), state='*')
@@ -223,6 +228,7 @@ async def active_questions_handler(call: types.CallbackQuery):
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(types.InlineKeyboardButton(text="Да", callback_data="sol."+call_data))
     await bot.send_message(chat_id=call.from_user.id,text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    await call.answer()
 
 async def update_question_text(message: types.Message, new_text: str, big_button: str, questionid: int, solverid: int):
     await message.edit_text(f"{new_text}", reply_markup=get_keyboard_navigation(big_button, questionid, solverid), parse_mode=types.ParseMode.HTML)
@@ -245,6 +251,7 @@ async def active_solutions_handler(call: types.CallbackQuery):
         form_text = f"<b>Решение №{page+1}, автор: "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
         keyboard = get_keyboard_navigation('active_nav', call_data, row[page])
         await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    await call.answer()
 
 @dp.callback_query_handler(Text(startswith="active_")) #clthr - закрытый вопрос (Close Thread). Ищем в solutions ответ и автора, в questions вносим автора и меняем на closed.
 async def active_nav_handler(call: types.CallbackQuery):
@@ -291,14 +298,126 @@ async def active_nav_handler(call: types.CallbackQuery):
 """
 Блок кода с открытыми вопросами и действиями над ними.
 """
-#@dp.message_handler(Text(equals="Открытые вопросы"))
-#async def open_questions(message: types.Message):
-    #показать все активные вопросы по ID?
-    #одна функция для закрытых и открытых вопросов?
-    #unauthorized для закрытых?
+@dp.message_handler(Text(equals="Открытые вопросы"))
+async def open_questions(message: types.Message):
+    global userData
+    global page
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM questions WHERE status = false;')
+    userData = cursor.fetchall()
+    cursor.close()
+    if len(userData) == 0:
+        await message.answer(text='На данный момент нет открытых вопросов.')
+    else:
+        page = 0
+        row = userData[page]
+        username = await get_username(int(row[1]))
+        header = row[2]
+        question = row[3]
+        questionid = int(row[0])
+        form_text = f"<b>Вопрос №{page+1}, автор: "+username+f"</b>\n\n<b>{header}</b>\n\n{question}"
+        keyboard = get_keyboard_navigation('open_nav', questionid, row[page])
+        await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+
+@dp.callback_query_handler(Text(startswith="open_"))
+async def open_questions_handler(call: types.CallbackQuery):
+    global userData
+    global page
+
+    action = call.data.split("_")[1]
+    try:
+        if action == "goback":
+            if page!=0:
+                page -= 1
+                row = userData[page]
+                username = await get_username(int(row[1]))
+                header = row[2]
+                question = row[3]
+                questionid = int(row[0])
+                form_text = f"<b>Вопрос №{page + 1}, автор: " + username + f"</b>\n\n<b>{header}</b>\n\n{question}"
+                await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
+
+        elif action == "goforward":
+            page += 1
+            row = userData[page]
+            username = await get_username(int(row[1]))
+            header = row[2]
+            question = row[3]
+            questionid = int(row[0])
+            form_text = f"<b>Вопрос №{page + 1}, автор: " + username + f"</b>\n\n<b>{header}</b>\n\n{question}"
+            await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
+
+        else:
+            print('ass')
+    except Exception as e:
+        print('Found an exception in open questions:', e)
+    await call.answer()
+
 """
 Блок кода с закрытыми вопросами и действиями над ними.
 """
+
+@dp.message_handler(Text(equals="Закрытые вопросы"))
+async def closed_questions(message: types.Message):
+    global userData
+    global page
+
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM questions WHERE status = true;')
+    userData = cursor.fetchall()
+    cursor.close()
+    if len(userData) == 0:
+        await message.answer(text='На данный момент нет закрытых вопросов.')
+    else:
+        page = 0
+        row = userData[page]
+        asker_username = await get_username(int(row[1]))
+        solver_username = await get_username(int(row[5]))
+        header = row[2]
+        question = row[3]
+        solution = row [6]
+        form_text = f"<b>Вопрос №{page+1}, автор: "+asker_username+f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
+                                                                   f"Решение <b>{solver_username}</b>:\n{solution}"
+        keyboard = get_keyboard_navigation('closed_nav', 0, 0)
+        await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+
+@dp.callback_query_handler(Text(startswith="closed_"))
+async def closed_questions_handler(call: types.CallbackQuery):
+    global userData
+    global page
+
+    action = call.data.split("_")[1]
+    try:
+        if action == "goback":
+            if page!=0:
+                page -= 1
+                row = userData[page]
+                asker_username = await get_username(int(row[1]))
+                solver_username = await get_username(int(row[5]))
+                header = row[2]
+                question = row[3]
+                solution = row[6]
+                form_text = f"<b>Вопрос №{page + 1}, автор: " + asker_username + f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
+                                                                                 f"Решение <b>{solver_username}</b>:\n{solution}"
+                await update_question_text(call.message, form_text, "closed_nav", 0, 0)
+
+        elif action == "goforward":
+            page += 1
+            row = userData[page]
+            asker_username = await get_username(int(row[1]))
+            solver_username = await get_username(int(row[5]))
+            header = row[2]
+            question = row[3]
+            solution = row[6]
+            form_text = f"<b>Вопрос №{page + 1}, автор: " + asker_username + f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
+                                                                             f"Решение <b>{solver_username}</b>:\n{solution}"
+            await update_question_text(call.message, form_text, "closed_nav", 0, 0)
+
+        else:
+            print('ass')
+    except Exception as e:
+        print('Found an exception in closed questions:', e)
+    await call.answer()
 
 @dp.errors_handler(exception=BotBlocked)
 async def error_bot_blocked(update: types.Update, exception: BotBlocked):
