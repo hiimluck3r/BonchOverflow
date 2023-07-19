@@ -31,7 +31,11 @@ while flag:
 
 @dp.message_handler(Text(equals="Администрация"))
 async def administration(message: types.Message):
-    await message.answer(f'Создатель бота: @{await get_username(ADMIN)}, по вопросам нарушения правил, улучшения бота и самым разнообразным предложениям обращайтесь в телеграм.\n\nПозднее этот раздел будет автоматизирован под систему тикетов.')
+    await message.answer(f'<b>Если вы:</b>\n\n'
+                         f'- Нашли баг или нарушение\n'
+                         f'- Хотите предложить что-то добавить\n'
+                         f'- Желаете просто сказать "спасибо"\n\n'
+                         f'То обращайтесь в @bonchoverflow_supportbot.', parse_mode=types.ParseMode.HTML)
 
 def get_banned(mode='update', userid=0, reason='0'):
     cursor = conn.cursor()
