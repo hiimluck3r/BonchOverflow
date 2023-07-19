@@ -79,7 +79,7 @@ async def get_username(user_id):
         return "n0tF0U//d"
 
 @dp.message_handler(commands="start")
-async def start_greet(message: types.Message):
+async def start_greet(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     goto_menu = types.KeyboardButton(text="Главное меню")
     keyboard.add(goto_menu)
@@ -156,9 +156,13 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
     await message.reply('Ввод данных остановлен. Вернёмся в мёню?', reply_markup=keyboard)
 
-@dp.message_handler(lambda message: len(message.text)>64, state=AskQuestion.header)
+@dp.message_handler(lambda message: len(message.text)>64 or (message.text=='/start'), state=AskQuestion.header)
 async def process_header_invalid(message: types.Message):
-    return await message.reply("Длина заголовка не должна превышать 64 символа.")
+    if message.text == "/start":
+        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+    else:
+        return await message.reply("Длина заголовка не должна превышать 64 символа.")
+
 @dp.message_handler(state=AskQuestion.header)
 async def process_header(message: types.Message, state: FSMContext):
     try:
@@ -171,9 +175,12 @@ async def process_header(message: types.Message, state: FSMContext):
         print('Exception found in process_header_invalid:', e)
 
 
-@dp.message_handler(lambda message: len(message.text)>1250, state=AskQuestion.question)
+@dp.message_handler(lambda message: len(message.text)>1250 or (message.text=='/start'), state=AskQuestion.question)
 async def process_question_invalid(message: types.Message):
-    return await message.reply("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
+    if message.text == '/start':
+        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+    else:
+        return await message.reply("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
 
 @dp.message_handler(state=AskQuestion.question)
 async def process_question(message: types.Message, state: FSMContext):
@@ -368,9 +375,12 @@ async def open_questions_handler(call: types.CallbackQuery):
         print('Found an exception in open questions handler:', e)
     await call.answer()
 
-@dp.message_handler(lambda message: len(message.text)>1250, state=AnswerQuestion.solution)
+@dp.message_handler(lambda message: len(message.text)>1250 or (message.text=='/start'), state=AnswerQuestion.solution)
 async def process_answer_invalid(message: types.Message):
-    return await message.reply("Длина ответа не должна превышать 1250 символов.")
+    if message.text == '/start':
+        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+    else:
+        return await message.reply("Длина ответа не должна превышать 1250 символов.")
 
 @dp.message_handler(state=AnswerQuestion.solution)
 async def process_answer(message: types.Message, state: FSMContext):
