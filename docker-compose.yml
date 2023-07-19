@@ -23,3 +23,21 @@ services:
       PGADMIN_DEFAULT_PASSWORD: test
     ports:
       - "80:80"
+
+  bonchoverflow:
+    container_name: bonchoverflow_bot
+    image: luck3rinc/bonchoverflow
+    restart: on-failure
+    environment:
+      - API_TOKEN=${API_TOKEN}
+      - HOST = ${HOST}
+      - DB = ${DB}
+      - USER = ${USER}
+      - PWD = ${PWD}
+    ports:
+      - "443:443"
+    volumes:
+      - ./logs:/~/BonchOverflow/logs
+
+volumes:
+  logs:
