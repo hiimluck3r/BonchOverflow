@@ -218,7 +218,7 @@ async def process_question(message: types.Message, state: FSMContext):
 async def user_questions(message: types.Message):
     userid = message.from_user.id
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM questions WHERE (userid = ' + str(userid) + ' AND status = false);')
+    cursor.execute(f"SELECT * FROM questions WHERE (userid = {userid} AND status = false);")
     questions = cursor.fetchall()
     cursor.close()
     questions_count = len(questions)
@@ -263,6 +263,7 @@ async def redact_active_handler(call: types.CallbackQuery):
     existingID = int(call.data.split('.')[1])
     cursor.execute(f"SELECT * FROM questions WHERE (id = {existingID} AND status = true);")
     existingRow = cursor.fetchone()
+    cursor.close()
     if existingRow == None:
         try:
             await AskQuestion.header.set()
