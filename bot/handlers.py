@@ -4,7 +4,7 @@ import sys
 from bot.dispatcher import dp, bot
 from aiogram import types
 from bot.controllers import get_username, get_keyboard_navigation
-from bot import DB, USER, PWD, HOST
+from bot import DB, USER, PWD, HOST, ADMIN
 from aiogram.utils.exceptions import BotBlocked
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
@@ -23,6 +23,85 @@ while flag:
     except Exception as e:
         print("Can't establish connection to database. Error:", e)
 
+"""
+
+Блок для работы с блокировкой и разблокировкой пользователей
+
+"""
+
+@dp.message_handler(Text(equals="Администрация"))
+async def administration(message: types.Message):
+    await message.answer(f'Создатель бота: @{await get_username(ADMIN)}, по вопросам нарушения правил, улучшения бота и самым разнообразным предложениям обращайтесь в телеграм.\n\nПозднее этот раздел будет автоматизирован под систему тикетов.')
+
+def get_banned(mode='update', userid=0, reason='0'):
+    cursor = conn.cursor()
+    if mode == 'update':
+        cursor.execute(f"SELECT * FROM banned;")
+        banned_data = cursor.fetchall()
+        banned_id = [int(row[1]) for row in banned_data]
+        banned_reasons = [row[2] for row in banned_data]
+        cursor.close()
+        return banned_id, banned_reasons
+
+    elif mode == 'add':
+        cursor.execute(f"SELECT * FROM banned WHERE userid = {userid};")
+        data = cursor.fetchone()
+        if data == None:
+            cursor.execute(f"INSERT INTO banned(userid, reason) VALUES ({userid}, '{reason}');")
+        else:
+            cursor.execute(f"UPDATE banned SET reason = '{reason}' WHERE userid = {userid};")
+
+    elif mode == 'remove':
+        try:
+            cursor.execute(f"DELETE from banned WHERE userid = {userid};")
+
+        except Exception as e:
+            print(f"Found an exception at ban mode remove {e}")
+
+    else:
+        print(mode, userid, reason)
+
+    conn.commit()
+    cursor.close()
+    return
+
+banned_id, banned_reasons = get_banned('update')
+
+@dp.message_handler(commands=['ban'], user_id=ADMIN)
+async def handle_ban_command(message: types.Message):
+    global banned_id
+    global banned_reasons
+
+    try:
+        command_args = message.get_args().split('.')
+        abuser_id = int(command_args[0])
+        reason = command_args[1]
+    except (ValueError, TypeError):
+        return await message.reply("Формат: /ban id.reason")
+
+    get_banned('add', abuser_id, reason)
+    banned_id, banned_reasons = get_banned('update')
+    await message.reply(f"Пользователь @{await get_username(abuser_id)} заблокирован по причине: {reason}.")
+
+@dp.message_handler(commands=['unban'], user_id=ADMIN)
+async def handle_ban_command(message: types.Message):
+    global banned_id
+    global banned_reasons
+
+    try:
+        abuser_id = int(message.get_args())
+    except (ValueError, TypeError):
+        return await message.reply("Формат: /unban id")
+
+    get_banned('remove', abuser_id, '0')
+    banned_id, banned_reasons = get_banned('update')
+    await message.reply(f"Пользователь @{await get_username(abuser_id)} разблокирован.")
+
+@dp.message_handler(user_id=banned_id)
+async def banned_handler(message: types.Message):
+    reason = banned_reasons[banned_id.index(message.from_user.id)]
+    await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
+
 greet = 'Привет и добро пожаловать в BonchOverflow! \n\nЗдесь ты можешь задать интересующие тебя вопросы, касающиеся университета и не только. \n\nИспользуя этого бота вы соглашаетесь с правилами эксплуатации BonchOverflow. Ознакомиться с правилами вы можете в пункте "Правила".'
 
 class AskQuestion(StatesGroup):
@@ -37,7 +116,7 @@ async def start_greet(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     goto_menu = types.KeyboardButton(text="Главное меню")
     keyboard.add(goto_menu)
-    await message.reply(greet, reply_markup=keyboard)
+    await message.answer(greet, reply_markup=keyboard)
 
 @dp.message_handler(Text(equals="Главное меню"))
 async def menu(message: types.Message):
@@ -48,19 +127,16 @@ async def menu(message: types.Message):
     keyboard.add(*buttons)
     buttons = ["Администрация"]
     keyboard.add(*buttons)
-    await message.reply("Главное меню", reply_markup=keyboard)
+    await message.answer("Главное меню", reply_markup=keyboard)
 
 @dp.message_handler(Text(equals="Правила"))
 async def rules(message: types.Message):
-    ruleString = "<b>Правила</b>\n\n" \
-                 "- Пользуясь ботом, вы принимаете на себя добровольное обязательство беспрекословно соблюдать нижеперечисленные правила.\n" \
-                 "- Незнание правил не освобождает пользователя от ответственности за их нарушение. Мера наказания в случае нарушения правил выбирается администрацией по усмотрению.\n" \
-                 "- Вопросы и ответы не должны нарушать действующее законодательство РФ.\n" \
-                 "- Вопросы и ответы не должны содержать непристойные выражения, открытую нецензурную брань, эвфемизмы, оскорбления по какому-либо признаку.\n" \
-                 "- Вопросы и ответы не должны содержать политического подтекста.\n" \
-                 "- Вопросы и ответы не должны содержать пропаганду оружия, насилия, наркотических или алкогольных веществ, курения и т.п.\n" \
-                 "- Вопросы и ответы не должны быть спамом. Реклама без согласия администрации приравнивается к спаму.\n" \
-                 "- Запрещено целенаправленное размещение ложной информации.\n"
+    ruleString = f"<b>Правила</b>\n\n" \
+                 f"- Пользуясь ботом, вы принимаете на себя добровольное обязательство беспрекословно соблюдать нижеперечисленные правила. <b>Незнание правил не освобождает от ответственности.</b>\n" \
+                 f"- Вопросы и ответы не должны нарушать действующее законодательство РФ, устав СПБГУТ, морально-этические нормы.\n" \
+                 f"- Вопросы и ответы не должны содержать спам или рекламу в любом виде. По вопросам рекламы обращайтесь к администрации.\n" \
+                 f"- Запрещено целенаправленное размещение ложной информации.\n" \
+                 f"- Запрещены любые целенаправленные действия, приводящие к нарушению работы бота. Если вы обнаружили баг, обратитесь к администрации.\n"
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     buttons = ["Главное меню"]
     keyboard.add(*buttons)
@@ -91,9 +167,9 @@ async def ask_question(message: types.Message):
     if len(questions) < 5:
         await AskQuestion.header.set()
 
-        await message.reply("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
+        await message.answer("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
     else:
-        await message.reply("Достигнут лимит открытых вопросов.")
+        await message.answer("Достигнут лимит открытых вопросов.")
 
 @dp.message_handler(state='*', commands='cancel')
 @dp.message_handler(Text(equals='отмена', ignore_case=True), state='*')
@@ -108,14 +184,14 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     print(f'Cancelling state %r', current_state, file=sys.stderr)
     await state.finish()
 
-    await message.reply('Ввод данных остановлен. Вернёмся в мёню?', reply_markup=keyboard)
+    await message.answer('Ввод данных остановлен.', reply_markup=keyboard)
 
 @dp.message_handler(lambda message: len(message.text)>64 or (message.text=='/start'), state=AskQuestion.header)
 async def process_header_invalid(message: types.Message):
     if message.text == "/start":
-        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+        return await message.answer('Для отмены введения данных нажмите кнопку "Отмена".')
     else:
-        return await message.reply("Длина заголовка не должна превышать 64 символа.")
+        return await message.answer("Длина заголовка не должна превышать 64 символа.")
 
 @dp.message_handler(state=AskQuestion.header)
 async def process_header(message: types.Message, state: FSMContext):
@@ -124,7 +200,7 @@ async def process_header(message: types.Message, state: FSMContext):
             data['header'] = message.text
 
         await AskQuestion.next()
-        await message.reply("Введите текст вопроса:")
+        await message.answer("Введите текст вопроса:")
     except Exception as e:
         print('Exception found in process_header_invalid:', e)
 
@@ -132,9 +208,9 @@ async def process_header(message: types.Message, state: FSMContext):
 @dp.message_handler(lambda message: len(message.text)>1250 or (message.text=='/start'), state=AskQuestion.question)
 async def process_question_invalid(message: types.Message):
     if message.text == '/start':
-        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+        return await message.answer('Для отмены введения данных нажмите кнопку "Отмена"')
     else:
-        return await message.reply("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
+        return await message.answer("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
 
 @dp.message_handler(state=AskQuestion.question)
 async def process_question(message: types.Message, state: FSMContext):
@@ -162,7 +238,7 @@ async def process_question(message: types.Message, state: FSMContext):
 
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
-        await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
+        await message.answer("Ваш вопрос будет отображаться подобным образом: \n\n"
                             f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{data['header']}</b>\n\n{data['question']}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found exception at process_question:', e)
@@ -367,9 +443,9 @@ async def open_questions_handler(call: types.CallbackQuery):
 @dp.message_handler(lambda message: len(message.text)>1250 or (message.text=='/start'), state=AnswerQuestion.solution)
 async def process_answer_invalid(message: types.Message):
     if message.text == '/start':
-        return await message.reply('Для отмены введения данных нажмите кнопку "Отмена"')
+        return await message.answer('Для отмены введения данных нажмите кнопку "Отмена".')
     else:
-        return await message.reply("Длина ответа не должна превышать 1250 символов.")
+        return await message.answer("Длина ответа не должна превышать 1250 символов.")
 
 @dp.message_handler(state=AnswerQuestion.solution)
 async def process_answer(message: types.Message, state: FSMContext):
@@ -390,7 +466,7 @@ async def process_answer(message: types.Message, state: FSMContext):
         conn.commit()
         cursor.close()
         await state.finish()
-        await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+        await message.answer(f"Решение внесено.\n\n<b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found an exception at process_answer:', e)
 
@@ -466,10 +542,6 @@ async def closed_questions_handler(call: types.CallbackQuery):
 """
 Прочее
 """
-
-@dp.message_handler(Text(equals="Администрация"))
-async def administration(message: types.Message):
-    await message.reply(f'Создатель бота: @{await get_username(340772367)}, по вопросам нарушения правил, улучшения бота и самым разнообразным предложениям обращайтесь в телеграм.\n\n Позднее этот раздел будет автоматизирован под систему тикетов.')
 
 @dp.errors_handler(exception=BotBlocked)
 async def error_bot_blocked(update: types.Update, exception: BotBlocked):
