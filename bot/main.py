@@ -24,6 +24,7 @@ dp = Dispatcher(bot, storage=storage)
 
 userData = []
 page = 0
+existingID = 0
 
 def get_keyboard_navigation(big_button, questionid, solutionid): #чувствую, что переход к такой навигации приведёт меня к боли и страданиям
     if big_button == 'open_nav': #кнопки навигации в "открытых вопросах"
@@ -36,7 +37,7 @@ def get_keyboard_navigation(big_button, questionid, solutionid): #чувству
         buttons = [
             types.InlineKeyboardButton(text='⬅️', callback_data='active_goback.'+str(questionid)),
             types.InlineKeyboardButton(text='➡️', callback_data='active_goforward.'+str(questionid)),
-            types.InlineKeyboardButton(text='Отметить как решение', callback_data='active_clthr.'+str(questionid)+'.'+str(solutionid))
+            types.InlineKeyboardButton(text='Отметить как решение', callback_data=f'active_clthr.{questionid}.{solutionid}')
         ]
     elif big_button == 'closed_nav': #кнопки навигации в "закрытых вопросах"
         buttons = [
@@ -76,7 +77,7 @@ async def get_username(user_id):
         return username
     except Exception as e:
         print("Error while getting username:", e)
-        return "n0tF0U//d"
+        return "404n0tF0uNd"
 
 @dp.message_handler(commands="start")
 async def start_greet(message: types.Message, state: FSMContext):
@@ -184,6 +185,8 @@ async def process_question_invalid(message: types.Message):
 
 @dp.message_handler(state=AskQuestion.question)
 async def process_question(message: types.Message, state: FSMContext):
+    global existingID
+    print(existingID)
     try:
         async with state.proxy() as data:
             data['question'] = message.text
@@ -194,15 +197,21 @@ async def process_question(message: types.Message, state: FSMContext):
         username = await get_username(userid)
 
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '');")
+        if existingID == 0:
+            cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '') RETURNING id;")
+            questionid = cursor.fetchone()[0]
+        else:
+            questionid = existingID
+            cursor.execute(f"UPDATE questions SET header = '{data['header']}' WHERE id = {existingID};")
+            cursor.execute(f"UPDATE questions SET question = '{data['question']}' WHERE id = {existingID};")
+            existingID = 0
         conn.commit()
         cursor.close()
 
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
         await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
-                            "<b>"+data['header']+"</b>\n"
-                                                 "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+                            f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{data['header']}</b>\n\n{data['question']}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found exception at process_question:', e)
 
@@ -238,8 +247,28 @@ async def active_questions_handler(call: types.CallbackQuery):
                     "Текст: "+str(question_text)+"\n\n" \
                     "Желаете рассмотреть предложенные ответы?"
     keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton(text="Да", callback_data="sol."+call_data))
+    keyboard.add(types.InlineKeyboardButton(text="Да", callback_data=f"sol.{call_data}"))
+    keyboard.add(types.InlineKeyboardButton(text="Изменить вопрос", callback_data=f"redact.{call_data}"))
+    keyboard.add(types.InlineKeyboardButton(text="Закрыть вопрос", callback_data=f"active_clthr.{call_data}.1"))
     await bot.send_message(chat_id=call.from_user.id,text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    await call.answer()
+
+@dp.callback_query_handler(Text(startswith="redact."))
+async def redact_active_handler(call: types.CallbackQuery):
+    global existingID
+
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(*['Отмена'])
+    existingID = int(call.data.split('.')[1])
+    print(existingID)
+    try:
+        await AskQuestion.header.set()
+
+        await bot.send_message(chat_id = call.from_user.id,
+            text = "Здесь вы можете изменить свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:",
+            reply_markup=keyboard)
+    except Exception as e:
+        print('Found an exception at redact_active_handler:', e)
     await call.answer()
 
 async def update_question_text(message: types.Message, new_text: str, big_button: str, questionid: int, solverid: int):
@@ -251,7 +280,7 @@ async def active_solutions_handler(call: types.CallbackQuery):
     global page
     call_data = call.data[4::]
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM public.solutions WHERE questionid = ' + call_data+";")
+    cursor.execute(f"SELECT * FROM solutions WHERE questionid = {call_data}")
     userData = cursor.fetchall()
     cursor.close()
     if len(userData) == 0:
@@ -260,7 +289,7 @@ async def active_solutions_handler(call: types.CallbackQuery):
         page = 0 #начиная с этого момента, Бог отказался от того, чтобы помогать мне в написании этого кода
         row = userData[page]
         username = await get_username(int(row[2]))
-        form_text = f"<b>Решение №{page+1}, автор: "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
+        form_text = f"<b>Решение №{page+1}, автор: @@"+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
         keyboard = get_keyboard_navigation('active_nav', call_data, row[2])
         await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     await call.answer()
@@ -276,13 +305,17 @@ async def active_nav_handler(call: types.CallbackQuery):
         questionid = data[0]
         solverid = data[1]
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {questionid} AND solverid = {solverid});")
+        if solverid != '1':
+            cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {questionid} AND solverid = {solverid});")
+        else:
+            cursor.execute(f"SELECT * FROM solutions WHERE id = {solverid};")
+            solverid = call.from_user.id
         data = cursor.fetchone()
         print(data)
         solution = data[3] #заменить потом все здесь на нормальные двойные кавычки
-        cursor.execute(f'UPDATE questions SET solution = ' + "'" + solution + "'" + 'WHERE id = '+questionid+';')
-        cursor.execute(f'UPDATE questions SET solverid = '+ solverid + ' WHERE id = '+questionid+';')
-        cursor.execute(f'UPDATE questions SET status = True WHERE id = ' + questionid + ';')
+        cursor.execute(f"UPDATE questions SET solution = '{solution}' WHERE id = {questionid};")
+        cursor.execute(f"UPDATE questions SET solverid = {solverid} WHERE id = {questionid};")
+        cursor.execute(f"UPDATE questions SET status = True WHERE id = {questionid};")
         conn.commit()
         cursor.close()
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
@@ -295,14 +328,14 @@ async def active_nav_handler(call: types.CallbackQuery):
                 page -= 1
                 row = userData[page]
                 username = await get_username(int(row[2]))
-                form_text = f"<b>Решение №{page + 1}, автор: " + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
                 await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
 
             elif action == 'goforward':
                 page += 1
                 row = userData[page]
                 username = await get_username(int(row[2]))
-                form_text = f"<b>Решение №{page + 1}, автор: " + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
                 await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
         except Exception as e: #я не имею ни малейшего понятия, как это дебажить через месяц, но оно выглядит красиво
             print("Found an exception in active questions handler:", e)
@@ -317,7 +350,7 @@ async def open_questions(message: types.Message):
     global userData
     global page
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM questions WHERE status = false;')
+    cursor.execute(f"SELECT * FROM questions WHERE status = false;")
     userData = cursor.fetchall()
     cursor.close()
     if len(userData) == 0:
@@ -329,7 +362,7 @@ async def open_questions(message: types.Message):
         header = row[2]
         question = row[3]
         questionid = int(row[0])
-        form_text = f"<b>Вопрос №{page+1}, автор: "+username+f"</b>\n\n<b>{header}</b>\n\n{question}"
+        form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
         keyboard = get_keyboard_navigation('open_nav', questionid, row[page])
         await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
@@ -348,7 +381,7 @@ async def open_questions_handler(call: types.CallbackQuery):
                 header = row[2]
                 question = row[3]
                 questionid = int(row[0])
-                form_text = f"<b>Вопрос №{page + 1}, автор: " + username + f"</b>\n\n<b>{header}</b>\n\n{question}"
+                form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
                 await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
 
         elif action == "goforward":
@@ -358,7 +391,7 @@ async def open_questions_handler(call: types.CallbackQuery):
             header = row[2]
             question = row[3]
             questionid = int(row[0])
-            form_text = f"<b>Вопрос №{page + 1}, автор: " + username + f"</b>\n\n<b>{header}</b>\n\n{question}"
+            form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
             await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
 
         else:
@@ -415,7 +448,7 @@ async def closed_questions(message: types.Message):
     global page
 
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM questions WHERE status = true;')
+    cursor.execute(f"SELECT * FROM questions WHERE status = true;")
     userData = cursor.fetchall()
     cursor.close()
     if len(userData) == 0:
@@ -428,8 +461,9 @@ async def closed_questions(message: types.Message):
         header = row[2]
         question = row[3]
         solution = row [6]
-        form_text = f"<b>Вопрос №{page+1}, автор: "+asker_username+f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
-                                                                   f"Решение <b>{solver_username}</b>:\n{solution}"
+        questionid = int(row[0])
+        form_text = f"<b>Вопрос №{page+1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
+                                                                   f"Решение @<b>{solver_username}</b>:\n{solution}"
         keyboard = get_keyboard_navigation('closed_nav', 0, 0)
         await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
@@ -449,8 +483,9 @@ async def closed_questions_handler(call: types.CallbackQuery):
                 header = row[2]
                 question = row[3]
                 solution = row[6]
-                form_text = f"<b>Вопрос №{page + 1}, автор: " + asker_username + f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
-                                                                                 f"Решение <b>{solver_username}</b>:\n{solution}"
+                questionid = int(row[0])
+                form_text = f"<b>Вопрос №{page + 1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
+                            f"Решение @<b>{solver_username}</b>:\n{solution}"
                 await update_question_text(call.message, form_text, "closed_nav", 0, 0)
 
         elif action == "goforward":
@@ -461,8 +496,9 @@ async def closed_questions_handler(call: types.CallbackQuery):
             header = row[2]
             question = row[3]
             solution = row[6]
-            form_text = f"<b>Вопрос №{page + 1}, автор: " + asker_username + f"</b>\n\n<b>{header}</b>\n\n{question}\n\n" \
-                                                                             f"Решение <b>{solver_username}</b>:\n{solution}"
+            questionid = int(row[0])
+            form_text = f"<b>Вопрос №{page + 1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
+                        f"Решение @<b>{solver_username}</b>:\n{solution}"
             await update_question_text(call.message, form_text, "closed_nav", 0, 0)
 
         else:
