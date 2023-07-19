@@ -407,7 +407,6 @@ async def open_questions_handler(call: types.CallbackQuery):
             await AnswerQuestion.solution.set()
             await bot.send_message(chat_id=call.message.chat.id, text="Введите текст ответа:", reply_markup=keyboard)
             await call.answer()
-
     except Exception as e:
         print('Found an exception in open questions handler:', e)
     await call.answer()
