@@ -22,7 +22,7 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
 
-userData = []
+userData = [] #this code is ugly and I have to rewrite it someday... 
 page = 0
 existingID = 0
 
