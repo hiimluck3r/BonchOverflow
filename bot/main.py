@@ -161,12 +161,15 @@ async def process_header_invalid(message: types.Message):
     return await message.reply("Длина заголовка не должна превышать 64 символа.")
 @dp.message_handler(state=AskQuestion.header)
 async def process_header(message: types.Message, state: FSMContext):
+    try:
+        async with state.proxy() as data:
+            data['header'] = message.text
 
-    async with state.proxy() as data:
-        data['header'] = message.text
+        await AskQuestion.next()
+        await message.reply("Введите текст вопроса:")
+    except Exception as e:
+        print('Exception found in process_header_invalid:', e)
 
-    await AskQuestion.next()
-    await message.reply("Введите текст вопроса:")
 
 @dp.message_handler(lambda message: len(message.text)>1250, state=AskQuestion.question)
 async def process_question_invalid(message: types.Message):
@@ -174,26 +177,27 @@ async def process_question_invalid(message: types.Message):
 
 @dp.message_handler(state=AskQuestion.question)
 async def process_question(message: types.Message, state: FSMContext):
+    try:
+        async with state.proxy() as data:
+            data['question'] = message.text
 
-    async with state.proxy() as data:
-        data['question'] = message.text
+        await state.finish()
 
-    await state.finish()
+        userid = message.from_user.id
+        username = await get_username(userid)
 
-    userid = message.from_user.id
-    username = await get_username(userid)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '');")
+        conn.commit()
+        cursor.close()
 
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '');")
-    conn.commit()
-    cursor.close()
-
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
-    await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
-                        "<b>"+data['header']+"</b>\n"
-                                             "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
-
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
+        await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
+                            "<b>"+data['header']+"</b>\n"
+                                                 "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    except Exception as e:
+        print('Found exception at process_question:', e)
 
 @dp.message_handler(Text(equals="Активные вопросы"))
 async def user_questions(message: types.Message):
@@ -373,23 +377,23 @@ async def process_answer(message: types.Message, state: FSMContext):
     global userData
 
     solution = message.text
-    if solution.lower() == 'отмена':
-        return await cancel_handler(message, state)
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
-    data = cursor.fetchone()
-    print(message.from_user.id)
-    if data == None:
-        cursor.execute(f"INSERT INTO solutions(questionid, solverid, solution) VALUES ({userData[0]}, {message.from_user.id}, '{solution}');")
-    else:
-        cursor.execute(f"UPDATE solutions SET solution = '{solution}' WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
-    conn.commit()
-    cursor.close()
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["Главное меню", "Открытые вопросы"]
     keyboard.add(*buttons)
-    await state.finish()
-    await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
+        data = cursor.fetchone()
+        if data == None:
+            cursor.execute(f"INSERT INTO solutions(questionid, solverid, solution) VALUES ({userData[0]}, {message.from_user.id}, '{solution}');")
+        else:
+            cursor.execute(f"UPDATE solutions SET solution = '{solution}' WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
+        conn.commit()
+        cursor.close()
+        await state.finish()
+        await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+    except Exception as e:
+        print('Found an exception at process_answer:', e)
 
 """
 Блок кода с закрытыми вопросами и действиями над ними.
