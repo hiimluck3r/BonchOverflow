@@ -4,11 +4,10 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from dotenv import load_dotenv
 import psycopg2
 import logging
-
 import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -17,14 +16,13 @@ HOST = os.environ.get('HOST')
 DB = os.environ.get('DB')
 USER = os.environ.get('USER')
 PWD = os.environ.get('PWD')
-
 bot = Bot(token=API_TOKEN)
 
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
 
-userData = [] #global temp solution, I guess
+userData = [] #this code is ugly and I have to rewrite it someday... 
 page = 0
 existingID = 0
 
@@ -351,7 +349,7 @@ async def active_nav_handler(call: types.CallbackQuery):
 Блок кода с открытыми вопросами и действиями над ними.
 """
 
-@dp.message_handler(Text(equals="Открытые вопросы")) #сделать листалку по 5 вопросов на странице?
+@dp.message_handler(Text(equals="Открытые вопросы"))
 async def open_questions(message: types.Message):
     global userData
     global page
