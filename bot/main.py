@@ -186,7 +186,6 @@ async def process_question_invalid(message: types.Message):
 @dp.message_handler(state=AskQuestion.question)
 async def process_question(message: types.Message, state: FSMContext):
     global existingID
-    print(existingID)
     try:
         async with state.proxy() as data:
             data['question'] = message.text
@@ -259,16 +258,22 @@ async def redact_active_handler(call: types.CallbackQuery):
 
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add(*['Отмена'])
-    existingID = int(call.data.split('.')[1])
-    print(existingID)
-    try:
-        await AskQuestion.header.set()
 
-        await bot.send_message(chat_id = call.from_user.id,
-            text = "Здесь вы можете изменить свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:",
-            reply_markup=keyboard)
-    except Exception as e:
-        print('Found an exception at redact_active_handler:', e)
+    cursor = conn.cursor()
+    existingID = int(call.data.split('.')[1])
+    cursor.execute(f"SELECT * FROM questions WHERE (id = {existingID} AND status = true);")
+    existingRow = cursor.fetchone()
+    if existingRow == None:
+        try:
+            await AskQuestion.header.set()
+
+            await bot.send_message(chat_id = call.from_user.id,
+                text = "Здесь вы можете изменить свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:",
+                reply_markup=keyboard)
+        except Exception as e:
+            print('Found an exception at redact_active_handler:', e)
+    else:
+        await bot.send_message(chat_id = call.from_user.id, text = "Вы не можете редактировать закрытые вопросы.")
     await call.answer()
 
 async def update_question_text(message: types.Message, new_text: str, big_button: str, questionid: int, solverid: int):
@@ -299,7 +304,6 @@ async def active_nav_handler(call: types.CallbackQuery):
     global userData
     global page
     call_data = call.data.split("_")[1]
-    print(call_data)
     if 'clthr.' in call_data:
         data = call_data[6::].split('.')
         questionid = data[0]
@@ -311,7 +315,6 @@ async def active_nav_handler(call: types.CallbackQuery):
             cursor.execute(f"SELECT * FROM solutions WHERE id = {solverid};")
             solverid = call.from_user.id
         data = cursor.fetchone()
-        print(data)
         solution = data[3] #заменить потом все здесь на нормальные двойные кавычки
         cursor.execute(f"UPDATE questions SET solution = '{solution}' WHERE id = {questionid};")
         cursor.execute(f"UPDATE questions SET solverid = {solverid} WHERE id = {questionid};")
