@@ -5,9 +5,9 @@ services:
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: ${USER}
-      POSTGRES_PASSWORD: ${PWD}
-      POSTGRES_DB: ${DB}
+      POSTGRES_USER: dbusername
+      POSTGRES_PASSWORD: dbpassword
+      POSTGRES_DB: bonchoverflow_db
     ports:
       - "5432:5432"
     volumes:
@@ -19,8 +19,8 @@ services:
     image: dpage/pgadmin4
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: test
-      PGADMIN_DEFAULT_PASSWORD: test
+      PGADMIN_DEFAULT_EMAIL: example@example.com
+      PGADMIN_DEFAULT_PASSWORD: yourpasswordhere
     ports:
       - "80:80"
 
@@ -29,15 +29,15 @@ services:
     image: luck3rinc/bonchoverflow
     restart: on-failure
     environment:
-      - API_TOKEN=${API_TOKEN}
-      - HOST = db
-      - DB = ${DB}
-      - USER = ${USER}
-      - PWD = ${PWD}
-    ports:
-      - "443:443"
+      API_TOKEN: yourtokenhere
+      HOST: db
+      DB: bonchoverflow_db
+      USER: dbusername
+      PWD: dbpassword
     volumes:
       - ./logs:/~/BonchOverflow/logs
+    depends_on:
+      - db
 
 volumes:
   logs:
