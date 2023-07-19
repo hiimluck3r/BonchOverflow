@@ -193,6 +193,8 @@ async def process_question(message: types.Message, state: FSMContext):
     await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
                         "<b>"+data['header']+"</b>\n"
                                              "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+
+
 @dp.message_handler(Text(equals="Активные вопросы"))
 async def user_questions(message: types.Message):
     userid = message.from_user.id
@@ -248,7 +250,7 @@ async def active_solutions_handler(call: types.CallbackQuery):
         row = userData[page]
         username = await get_username(int(row[2]))
         form_text = f"<b>Решение №{page+1}, автор: "+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
-        keyboard = get_keyboard_navigation('active_nav', call_data, row[page])
+        keyboard = get_keyboard_navigation('active_nav', call_data, row[2])
         await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     await call.answer()
 
@@ -257,13 +259,15 @@ async def active_nav_handler(call: types.CallbackQuery):
     global userData
     global page
     call_data = call.data.split("_")[1]
+    print(call_data)
     if 'clthr.' in call_data:
         data = call_data[6::].split('.')
         questionid = data[0]
         solverid = data[1]
         cursor = conn.cursor()
-        cursor.execute(f'SELECT * FROM public.solutions WHERE (questionid = '+questionid+' AND solverid = '+solverid+');')
+        cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {questionid} AND solverid = {solverid});")
         data = cursor.fetchone()
+        print(data)
         solution = data[3] #заменить потом все здесь на нормальные двойные кавычки
         cursor.execute(f'UPDATE questions SET solution = ' + "'" + solution + "'" + 'WHERE id = '+questionid+';')
         cursor.execute(f'UPDATE questions SET solverid = '+ solverid + ' WHERE id = '+questionid+';')
@@ -354,6 +358,7 @@ async def open_questions_handler(call: types.CallbackQuery):
 
             await AnswerQuestion.solution.set()
             await bot.send_message(chat_id=call.message.chat.id, text="Введите текст ответа:", reply_markup=keyboard)
+            await call.answer()
 
     except Exception as e:
         print('Found an exception in open questions handler:', e)
@@ -368,17 +373,23 @@ async def process_answer(message: types.Message, state: FSMContext):
     global userData
 
     solution = message.text
+    if solution.lower() == 'отмена':
+        return await cancel_handler(message, state)
     cursor = conn.cursor()
     cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
     data = cursor.fetchone()
+    print(message.from_user.id)
     if data == None:
         cursor.execute(f"INSERT INTO solutions(questionid, solverid, solution) VALUES ({userData[0]}, {message.from_user.id}, '{solution}');")
     else:
         cursor.execute(f"UPDATE solutions SET solution = '{solution}' WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
     conn.commit()
     cursor.close()
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    buttons = ["Главное меню", "Открытые вопросы"]
+    keyboard.add(*buttons)
     await state.finish()
-    await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML)
+    await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
 """
 Блок кода с закрытыми вопросами и действиями над ними.
@@ -459,6 +470,7 @@ async def error_bot_blocked(update: types.Update, exception: BotBlocked):
     # Здесь можно как-то обработать блокировку, например, удалить пользователя из БД
     print(f"Меня заблокировал пользователь!\nСообщение: {update}\nОшибка: {exception}")
     return True
+
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
