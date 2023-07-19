@@ -1,13 +1,13 @@
-version: '3.8'
+version: '3.9'
 services:
   db:
     container_name: pg_container
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
-      POSTGRES_DB: test_db
+      POSTGRES_USER: ${USER}
+      POSTGRES_PASSWORD: ${PWD}
+      POSTGRES_DB: ${DB}
     ports:
       - "5432:5432"
     volumes:
@@ -30,7 +30,7 @@ services:
     restart: on-failure
     environment:
       - API_TOKEN=${API_TOKEN}
-      - HOST = ${HOST}
+      - HOST = db
       - DB = ${DB}
       - USER = ${USER}
       - PWD = ${PWD}
