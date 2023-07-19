@@ -23,7 +23,7 @@ dp = Dispatcher(bot, storage=storage)
 
 
 userData = []
-page = [0]
+page = 0
 
 def get_keyboard_navigation(big_button, questionid, solutionid): #чувствую, что переход к такой навигации приведёт меня к боли и страданиям
     if big_button == 'open_nav': #кнопки навигации в "открытых вопросах"
@@ -43,9 +43,8 @@ def get_keyboard_navigation(big_button, questionid, solutionid): #чувству
             types.InlineKeyboardButton(text='⬅️', callback_data='closed_goback'),
             types.InlineKeyboardButton(text='➡️', callback_data='closed_goforward')
         ]
-    else: #на всякий, чтобы ловить неопознанные кнопки в ходе разработки
-        print('Unknown button type:', big_button)
-        return None
+    else:
+        return
     keyboard = types.InlineKeyboardMarkup(row_width=2)
     keyboard.add(*buttons)
     return keyboard
@@ -66,6 +65,9 @@ logging.basicConfig(level=logging.INFO)
 class AskQuestion(StatesGroup):
     header = State()
     question = State()
+
+class AnswerQuestion(StatesGroup):
+    solution = State()
 
 async def get_username(user_id):
     try:
@@ -130,7 +132,7 @@ async def ask_question(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add(*['Отмена'])
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM questions WHERE userid = '+str(message.from_user.id)+";")
+    cursor.execute(f"SELECT * FROM questions WHERE (userid = {message.from_user.id} AND status = false);")
     questions = cursor.fetchall()
     if len(questions) < 5:
         await AskQuestion.header.set()
@@ -171,7 +173,7 @@ async def process_question_invalid(message: types.Message):
     return await message.reply("Длина вопроса не должна превышать 1250 символов.") #1250*2 = 3500 + 2*ID + Header, лимит = 4096 символа на сообщение в телеграме.
 
 @dp.message_handler(state=AskQuestion.question)
-async def process_header(message: types.Message, state: FSMContext):
+async def process_question(message: types.Message, state: FSMContext):
 
     async with state.proxy() as data:
         data['question'] = message.text
@@ -187,7 +189,7 @@ async def process_header(message: types.Message, state: FSMContext):
     cursor.close()
 
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(*['Главное меню'])
+    keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
     await message.reply("Ваш вопрос будет отображаться подобным образом: \n\n"
                         "<b>"+data['header']+"</b>\n"
                                              "Задал: "+username+"\n\n"+data['question'], parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
@@ -195,17 +197,15 @@ async def process_header(message: types.Message, state: FSMContext):
 async def user_questions(message: types.Message):
     userid = message.from_user.id
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM questions WHERE userid = ' + str(userid) + ' AND status = false;')
+    cursor.execute('SELECT * FROM questions WHERE (userid = ' + str(userid) + ' AND status = false);')
     questions = cursor.fetchall()
     cursor.close()
     questions_count = len(questions)
-    print(questions)
     if questions_count != 0:
         keyboard = types.InlineKeyboardMarkup()
         for i in range(questions_count):
             header = questions[i][2]
             questionid = questions[i][0]
-            print(header, questionid)
             keyboard.add(types.InlineKeyboardButton(text=header, callback_data = "act."+str(questionid)))
         await message.answer("На данный момент активны следующие вопросы:", reply_markup=keyboard)
     else:
@@ -214,7 +214,6 @@ async def user_questions(message: types.Message):
 @dp.callback_query_handler(Text(startswith="act.")) #act. - активный вопрос (active). Ищем в db questions
 async def active_questions_handler(call: types.CallbackQuery):
     call_data = call.data[4::]
-    print(call_data)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM public.questions WHERE id = '+ call_data+";")
     data = cursor.fetchone()
@@ -257,20 +256,18 @@ async def active_solutions_handler(call: types.CallbackQuery):
 async def active_nav_handler(call: types.CallbackQuery):
     global userData
     global page
-    print(call.data)
     call_data = call.data.split("_")[1]
     if 'clthr.' in call_data:
         data = call_data[6::].split('.')
         questionid = data[0]
         solverid = data[1]
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM public.solutions WHERE questionid = '+questionid+' AND solverid = '+solverid+';')
+        cursor.execute(f'SELECT * FROM public.solutions WHERE (questionid = '+questionid+' AND solverid = '+solverid+');')
         data = cursor.fetchone()
-        print(data)
-        solution = data[3]
-        cursor.execute('UPDATE questions SET solution = ' + "'" + solution + "'" + 'WHERE id = '+questionid+';')
-        cursor.execute('UPDATE questions SET solverid = '+ solverid + ' WHERE id = '+questionid+';')
-        cursor.execute('UPDATE questions SET status = True WHERE id = ' + questionid + ';')
+        solution = data[3] #заменить потом все здесь на нормальные двойные кавычки
+        cursor.execute(f'UPDATE questions SET solution = ' + "'" + solution + "'" + 'WHERE id = '+questionid+';')
+        cursor.execute(f'UPDATE questions SET solverid = '+ solverid + ' WHERE id = '+questionid+';')
+        cursor.execute(f'UPDATE questions SET status = True WHERE id = ' + questionid + ';')
         conn.commit()
         cursor.close()
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
@@ -293,11 +290,13 @@ async def active_nav_handler(call: types.CallbackQuery):
                 form_text = f"<b>Решение №{page + 1}, автор: " + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
                 await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
         except Exception as e: #я не имею ни малейшего понятия, как это дебажить через месяц, но оно выглядит красиво
-            print("Found an exception:", e)
+            print("Found an exception in active questions handler:", e)
     await call.answer()
+
 """
 Блок кода с открытыми вопросами и действиями над ними.
 """
+
 @dp.message_handler(Text(equals="Открытые вопросы"))
 async def open_questions(message: types.Message):
     global userData
@@ -322,7 +321,7 @@ async def open_questions(message: types.Message):
 @dp.callback_query_handler(Text(startswith="open_"))
 async def open_questions_handler(call: types.CallbackQuery):
     global userData
-    global page #to_do: add functional for answering
+    global page
 
     action = call.data.split("_")[1]
     try:
@@ -348,10 +347,38 @@ async def open_questions_handler(call: types.CallbackQuery):
             await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
 
         else:
-            print('ass')
+            questionid = int(action.split('.')[1])
+            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            keyboard.add(*['Отмена'])
+            userData[0] = questionid
+
+            await AnswerQuestion.solution.set()
+            await bot.send_message(chat_id=call.message.chat.id, text="Введите текст ответа:", reply_markup=keyboard)
+
     except Exception as e:
-        print('Found an exception in open questions:', e)
+        print('Found an exception in open questions handler:', e)
     await call.answer()
+
+@dp.message_handler(lambda message: len(message.text)>1250, state=AnswerQuestion.solution)
+async def process_answer_invalid(message: types.Message):
+    return await message.reply("Длина ответа не должна превышать 1250 символов.")
+
+@dp.message_handler(state=AnswerQuestion.solution)
+async def process_answer(message: types.Message, state: FSMContext):
+    global userData
+
+    solution = message.text
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
+    data = cursor.fetchone()
+    if data == None:
+        cursor.execute(f"INSERT INTO solutions(questionid, solverid, solution) VALUES ({userData[0]}, {message.from_user.id}, '{solution}');")
+    else:
+        cursor.execute(f"UPDATE solutions SET solution = '{solution}' WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
+    conn.commit()
+    cursor.close()
+    await state.finish()
+    await message.answer(f"Решение внесено.\n\n <b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML)
 
 """
 Блок кода с закрытыми вопросами и действиями над ними.
@@ -416,8 +443,16 @@ async def closed_questions_handler(call: types.CallbackQuery):
         else:
             print('ass')
     except Exception as e:
-        print('Found an exception in closed questions:', e)
+        print('Found an exception in closed questions handler:', e)
     await call.answer()
+
+"""
+Прочее
+"""
+
+@dp.message_handler(Text(equals="Администрация"))
+async def administration(message: types.Message):
+    await message.reply(f'Создатель бота: @{await get_username(340772367)}, по вопросам нарушения правил, улучшения бота и самым разнообразным предложениям обращайтесь в телеграм.\n\n Позднее этот раздел будет автоматизирован под систему тикетов.')
 
 @dp.errors_handler(exception=BotBlocked)
 async def error_bot_blocked(update: types.Update, exception: BotBlocked):
