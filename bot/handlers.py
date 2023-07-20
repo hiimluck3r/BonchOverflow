@@ -101,11 +101,6 @@ async def handle_ban_command(message: types.Message):
     banned_id, banned_reasons = get_banned('update')
     await message.reply(f"Пользователь @{await get_username(abuser_id)} разблокирован.")
 
-@dp.message_handler(user_id=banned_id)
-async def banned_handler(message: types.Message):
-    reason = banned_reasons[banned_id.index(message.from_user.id)]
-    await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
-
 greet = 'Привет и добро пожаловать в BonchOverflow! \n\nЗдесь ты можешь задать интересующие тебя вопросы, касающиеся университета и не только. \n\nИспользуя этого бота вы соглашаетесь с правилами эксплуатации BonchOverflow. Ознакомиться с правилами вы можете в пункте "Правила".'
 
 class AskQuestion(StatesGroup):
@@ -152,28 +147,40 @@ async def rules(message: types.Message):
 
 @dp.message_handler(Text(equals="Ваши вопросы"))
 async def your_questions(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    buttons = ["Задать вопрос", "Активные вопросы"]
-    keyboard.add(*buttons)
-    buttons = ["Главное меню"]
-    keyboard.add(*buttons)
+    global banned_id
+    global banned_reasons
 
-    await message.answer("Здесь вы можете задать вопрос или просмотреть активные на данный момент.\n\n"
-                         "Одновременно могут быть активными не более 5 вопросов!", reply_markup=keyboard, parse_mode=types.ParseMode.HTML)
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
+    else:
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        buttons = ["Задать вопрос", "Активные вопросы"]
+        keyboard.add(*buttons)
+        buttons = ["Главное меню"]
+        keyboard.add(*buttons)
+
+        await message.answer("Здесь вы можете задать вопрос или просмотреть активные на данный момент.\n\n"
+                             "Одновременно могут быть активными не более 5 вопросов!", reply_markup=keyboard, parse_mode=types.ParseMode.HTML)
 
 @dp.message_handler(Text(equals="Задать вопрос"))
 async def ask_question(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(*['Отмена'])
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM questions WHERE (userid = {message.from_user.id} AND status = false);")
-    questions = cursor.fetchall()
-    if len(questions) < 5:
-        await AskQuestion.header.set()
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
 
-        await message.answer("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
     else:
-        await message.answer("Достигнут лимит открытых вопросов.")
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keyboard.add(*['Отмена'])
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM questions WHERE (userid = {message.from_user.id} AND status = false);")
+        questions = cursor.fetchall()
+        if len(questions) < 5:
+            await AskQuestion.header.set()
+
+            await message.answer("Здесь вы можете задать свой вопрос. Помните, что вопросы, каким-либо образом нарушающие правила проекта, будут удалены! \n\nВведите заголовок вопроса:", reply_markup=keyboard)
+        else:
+            await message.answer("Достигнут лимит открытых вопросов.")
 
 @dp.message_handler(state='*', commands='cancel')
 @dp.message_handler(Text(equals='отмена', ignore_case=True), state='*')
@@ -249,21 +256,26 @@ async def process_question(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Активные вопросы"))
 async def user_questions(message: types.Message):
-    userid = message.from_user.id
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM questions WHERE (userid = {userid} AND status = false);")
-    questions = cursor.fetchall()
-    cursor.close()
-    questions_count = len(questions)
-    if questions_count != 0:
-        keyboard = types.InlineKeyboardMarkup()
-        for i in range(questions_count):
-            header = questions[i][2]
-            questionid = questions[i][0]
-            keyboard.add(types.InlineKeyboardButton(text=header, callback_data = "act."+str(questionid)))
-        await message.answer("На данный момент активны следующие вопросы:", reply_markup=keyboard)
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
+
     else:
-        await message.answer("На данный момент нет активных вопросов.")
+        userid = message.from_user.id
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM questions WHERE (userid = {userid} AND status = false);")
+        questions = cursor.fetchall()
+        cursor.close()
+        questions_count = len(questions)
+        if questions_count != 0:
+            keyboard = types.InlineKeyboardMarkup()
+            for i in range(questions_count):
+                header = questions[i][2]
+                questionid = questions[i][0]
+                keyboard.add(types.InlineKeyboardButton(text=header, callback_data = "act."+str(questionid)))
+            await message.answer("На данный момент активны следующие вопросы:", reply_markup=keyboard)
+        else:
+            await message.answer("На данный момент нет активных вопросов.")
 
 @dp.callback_query_handler(Text(startswith="act.")) #act. - активный вопрос (active). Ищем в db questions
 async def active_questions_handler(call: types.CallbackQuery):
@@ -384,24 +396,29 @@ async def active_nav_handler(call: types.CallbackQuery):
 
 @dp.message_handler(Text(equals="Открытые вопросы")) #сделать листалку по 5 вопросов на странице?
 async def open_questions(message: types.Message):
-    global userData
-    global page
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM questions WHERE status = false;")
-    userData = cursor.fetchall()
-    cursor.close()
-    if len(userData) == 0:
-        await message.answer(text='На данный момент нет открытых вопросов.')
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
+
     else:
-        page = 0
-        row = userData[page]
-        username = await get_username(int(row[1]))
-        header = row[2]
-        question = row[3]
-        questionid = int(row[0])
-        form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
-        keyboard = get_keyboard_navigation('open_nav', questionid, row[page])
-        await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+        global userData
+        global page
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM questions WHERE status = false;")
+        userData = cursor.fetchall()
+        cursor.close()
+        if len(userData) == 0:
+            await message.answer(text='На данный момент нет открытых вопросов.')
+        else:
+            page = 0
+            row = userData[page]
+            username = await get_username(int(row[1]))
+            header = row[2]
+            question = row[3]
+            questionid = int(row[0])
+            form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
+            keyboard = get_keyboard_navigation('open_nav', questionid, row[page])
+            await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
 @dp.callback_query_handler(Text(startswith="open_"))
 async def open_questions_handler(call: types.CallbackQuery):
@@ -480,28 +497,32 @@ async def process_answer(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text(equals="Закрытые вопросы"))
 async def closed_questions(message: types.Message):
-    global userData
-    global page
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
 
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM questions WHERE status = true;")
-    userData = cursor.fetchall()
-    cursor.close()
-    if len(userData) == 0:
-        await message.answer(text='На данный момент нет закрытых вопросов.')
     else:
-        page = 0
-        row = userData[page]
-        asker_username = await get_username(int(row[1]))
-        solver_username = await get_username(int(row[5]))
-        header = row[2]
-        question = row[3]
-        solution = row [6]
-        questionid = int(row[0])
-        form_text = f"<b>Вопрос №{page+1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
-                                                                   f"Решение @<b>{solver_username}</b>:\n{solution}"
-        keyboard = get_keyboard_navigation('closed_nav', 0, 0)
-        await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+        global userData
+        global page
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM questions WHERE status = true;")
+        userData = cursor.fetchall()
+        cursor.close()
+        if len(userData) == 0:
+            await message.answer(text='На данный момент нет закрытых вопросов.')
+        else:
+            page = 0
+            row = userData[page]
+            asker_username = await get_username(int(row[1]))
+            solver_username = await get_username(int(row[5]))
+            header = row[2]
+            question = row[3]
+            solution = row [6]
+            questionid = int(row[0])
+            form_text = f"<b>Вопрос №{page+1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
+                                                                       f"Решение @<b>{solver_username}</b>:\n{solution}"
+            keyboard = get_keyboard_navigation('closed_nav', 0, 0)
+            await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
 
 @dp.callback_query_handler(Text(startswith="closed_"))
 async def closed_questions_handler(call: types.CallbackQuery):

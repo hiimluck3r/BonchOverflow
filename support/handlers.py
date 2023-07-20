@@ -1,3 +1,6 @@
+import os
+import json
+
 from support.dispatcher import dp, bot
 from support import ADMIN
 from aiogram import types
@@ -16,6 +19,56 @@ async def get_username(user_id):
     except Exception as e:
         print("Error while getting username:", e)
         return "404n0tF0uNd"
+
+def get_banned(mode='update', userid=0):
+    if mode == 'update':
+        with open('support/banned.json') as json_file:
+            banned_id = json.load(json_file)['banned']
+
+    elif mode == 'add':
+        banned_id = get_banned('update')
+        banned_id.append(userid)
+        banned_id = list(set(banned_id))
+        json_string = {'banned': banned_id}
+        with open('support/banned.json', 'w') as outfile:
+            json.dump(json_string, outfile, ensure_ascii=False)
+
+    elif mode == 'remove':
+        banned_id = get_banned('update')
+        banned_id.remove(userid)
+        json_string = {'banned': banned_id}
+        with open('support/banned.json', 'w') as outfile:
+            json.dump(json_string, outfile, ensure_ascii=False)
+
+    return banned_id
+
+
+banned_id = get_banned('update')
+
+@dp.message_handler(commands=['ban'], user_id=ADMIN)
+async def handle_ban_command(message: types.Message):
+    global banned_id
+
+    try:
+        abuser_id = int(message.get_args())
+    except (ValueError, TypeError):
+        return await message.reply("Формат: /ban id")
+
+    banned_id = get_banned('add', abuser_id)
+    await message.reply(f"Пользователь @{await get_username(abuser_id)} заблокирован.")
+
+@dp.message_handler(commands=['unban'], user_id=ADMIN)
+async def handle_ban_command(message: types.Message):
+    global banned_id
+
+    try:
+        abuser_id = int(message.get_args())
+    except (ValueError, TypeError):
+        return await message.reply("Формат: /unban id")
+
+    get_banned('remove', abuser_id)
+    banned_id = get_banned('update')
+    await message.reply(f"Пользователь @{await get_username(abuser_id)} разблокирован.")
 
 class sendText(StatesGroup):
     text = State()
@@ -43,27 +96,31 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
 @dp.message_handler(Text("Отправить обращение"))
 async def send_ticket(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add("Отмена")
+    if message.from_user.id in banned_id:
+        await message.answer(f"Вы заблокированы.")
 
-    await sendText.text.set()
-    await message.answer("Введите текст обращения:", reply_markup=keyboard)
-
-@dp.callback_query_handler(Text("answer"))
-async def send_ticket(call: types.CallbackQuery):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add("Отмена")
-
-    await sendText.text.set()
-    await bot.send_message(chat_id=call.message.chat.id, text="Введите текст обращения:", reply_markup=keyboard)
-    await call.answer()
-
-@dp.message_handler(lambda message: len(message.text)>3500 or (message.text=='/start'), state=sendText.text.set())
-async def process_text_invalid(message: types.Message):
-    if message.text == '/start':
-        return await message.answer('Для отмены введения данных нажмите кнопку "Отмена".')
     else:
-        return await message.answer("Длина обращения не должна превышать 3500 символов.")
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keyboard.add("Отмена")
+
+        await sendText.text.set()
+        await message.answer("Введите текст обращения:", reply_markup=keyboard)
+
+    @dp.callback_query_handler(Text("answer"))
+    async def send_ticket(call: types.CallbackQuery):
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        keyboard.add("Отмена")
+
+        await sendText.text.set()
+        await bot.send_message(chat_id=call.message.chat.id, text="Введите текст обращения:", reply_markup=keyboard)
+        await call.answer()
+
+    @dp.message_handler(lambda message: len(message.text)>3500 or (message.text=='/start'), state=sendText.text.set())
+    async def process_text_invalid(message: types.Message):
+        if message.text == '/start':
+            return await message.answer('Для отмены введения данных нажмите кнопку "Отмена".')
+        else:
+            return await message.answer("Длина обращения не должна превышать 3500 символов.")
 
 @dp.message_handler(state=sendText.text)
 async def process_text(message: types.Message, state: FSMContext):
