@@ -34,10 +34,19 @@ services:
       DB: bonchoverflow_db
       USER: dbusername
       PWD: dbpassword
+      ADMIN: yourtelegramid
     volumes:
       - ./logs:/~/BonchOverflow/logs
     depends_on:
       - db
+
+  bonchoverflow_support:
+    container_name: bonchoverflow_supportbot
+    image: luck3rinc/bonchoverflow_support
+    restart: on-failure
+    environment:
+      SUPPORT_TOKEN: yourtokenhere
+      ADMIN: yourtelegramid
 
 volumes:
   logs:
