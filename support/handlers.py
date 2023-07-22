@@ -135,7 +135,10 @@ async def process_text(message: types.Message, state: FSMContext):
         await bot.send_message(chat_id=ADMIN, text=f"Обращение от @{await get_username(message.from_user.id)}, ID: {message.from_user.id}\n\n"
                                                    f"{message.text}", reply_markup=keyboard)
     await state.finish()
-    await message.answer("Сообщение отправлено.")
+
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(*['Вернуться'])
+    await message.answer("Сообщение отправлено.", reply_markup=keyboard)
 
 @dp.errors_handler(exception=BotBlocked)
 async def error_bot_blocked(update: types.Update, exception: BotBlocked):
