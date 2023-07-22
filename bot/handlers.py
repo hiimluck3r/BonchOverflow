@@ -329,6 +329,7 @@ async def update_question_text(message: types.Message, new_text: str, big_button
 async def active_solutions_handler(call: types.CallbackQuery):
     global userData
     global page
+
     call_data = call.data[4::]
     cursor = conn.cursor()
     cursor.execute(f"SELECT * FROM solutions WHERE questionid = {call_data}")
@@ -374,18 +375,20 @@ async def active_nav_handler(call: types.CallbackQuery):
         questionid = int(questionid)
         try:
             if action == 'goback':
-                page -= 1
-                row = userData[page]
-                username = await get_username(int(row[2]))
-                form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
-                await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
+                if page != 0:
+                    page -= 1
+                    row = userData[page]
+                    username = await get_username(int(row[2]))
+                    form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                    await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
 
             elif action == 'goforward':
-                page += 1
-                row = userData[page]
-                username = await get_username(int(row[2]))
-                form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
-                await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
+                if page != len(userData)-1:
+                    page += 1
+                    row = userData[page]
+                    username = await get_username(int(row[2]))
+                    form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                    await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
         except Exception as e: #я не имею ни малейшего понятия, как это дебажить через месяц, но оно выглядит красиво
             print("Found an exception in active questions handler:", e)
     await call.answer()
@@ -439,14 +442,15 @@ async def open_questions_handler(call: types.CallbackQuery):
                 await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
 
         elif action == "goforward":
-            page += 1
-            row = userData[page]
-            username = await get_username(int(row[1]))
-            header = row[2]
-            question = row[3]
-            questionid = int(row[0])
-            form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
-            await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
+            if page != len(userData)-1:
+                page += 1
+                row = userData[page]
+                username = await get_username(int(row[1]))
+                header = row[2]
+                question = row[3]
+                questionid = int(row[0])
+                form_text = f"<b>Вопрос №{page + 1}, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
+                await update_question_text(call.message, form_text, "open_nav", questionid, int(row[1]))
 
         else:
             questionid = int(action.split('.')[1])
@@ -546,17 +550,18 @@ async def closed_questions_handler(call: types.CallbackQuery):
                 await update_question_text(call.message, form_text, "closed_nav", 0, 0)
 
         elif action == "goforward":
-            page += 1
-            row = userData[page]
-            asker_username = await get_username(int(row[1]))
-            solver_username = await get_username(int(row[5]))
-            header = row[2]
-            question = row[3]
-            solution = row[6]
-            questionid = int(row[0])
-            form_text = f"<b>Вопрос №{page + 1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
-                        f"Решение @<b>{solver_username}</b>:\n{solution}"
-            await update_question_text(call.message, form_text, "closed_nav", 0, 0)
+            if page != len(userData) - 1:
+                page += 1
+                row = userData[page]
+                asker_username = await get_username(int(row[1]))
+                solver_username = await get_username(int(row[5]))
+                header = row[2]
+                question = row[3]
+                solution = row[6]
+                questionid = int(row[0])
+                form_text = f"<b>Вопрос №{page + 1}, автор: @{asker_username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}\n\n" \
+                            f"Решение @<b>{solver_username}</b>:\n{solution}"
+                await update_question_text(call.message, form_text, "closed_nav", 0, 0)
 
         else:
             print('ass')
