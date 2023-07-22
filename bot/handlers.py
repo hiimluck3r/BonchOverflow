@@ -34,7 +34,7 @@ async def administration(message: types.Message):
     await message.answer(f'<b>Если у Вас возникли вопросы касательно:</b>\n\n'
                          f'* Работоспособности (баги, нарушения)\n'
                          f'* Усовершенствования бота\n'
-                         f'* Адреса доставки сладких подарков (это очень поможет поддерживать бота)"\n\n'
+                         f'* Адреса доставки сладких подарков (это очень поможет поддерживать бота)\n\n'
                          f'Обращайтесь в @bonchoverflow_supportbot.', parse_mode=types.ParseMode.HTML)
 
 def get_banned(mode='update', userid=0, reason='0'):
