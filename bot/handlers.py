@@ -367,7 +367,7 @@ async def active_nav_handler(call: types.CallbackQuery):
         cursor.execute(f"UPDATE questions SET solution = '{solution}' WHERE id = {questionid};")
         cursor.execute(f"UPDATE questions SET solverid = {solverid} WHERE id = {questionid};")
         cursor.execute(f"UPDATE questions SET status = True WHERE id = {questionid};")
-        cursor.execute(f"DELETE * FROM solutions WHERE questionid = {questionid};")
+        cursor.execute(f"DELETE FROM solutions WHERE questionid = {questionid};")
         conn.commit()
         cursor.close()
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
