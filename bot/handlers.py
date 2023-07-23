@@ -251,7 +251,7 @@ async def process_question(message: types.Message, state: FSMContext):
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
         await message.answer("Ваш вопрос будет отображаться подобным образом: \n\n"
-                            f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{fmt.quote_html(data['header'])}</b>\n\n{fmt.quote_html(['question'])}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+                            f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{fmt.quote_html(data['header'])}</b>\n\n{fmt.quote_html(data['question'])}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found exception at process_question:', e)
 
