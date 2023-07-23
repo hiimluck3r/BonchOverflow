@@ -1,5 +1,6 @@
 import sys
 import psycopg2
+import random
 import aiogram.utils.markdown as fmt
 
 from bot.dispatcher import dp, bot
@@ -30,9 +31,10 @@ while flag:
 
 """
 
-@dp.message_handler(Text(equals="Администрация"))
+@dp.message_handler(Text(equals="Техническая поддержка"))
 async def administration(message: types.Message):
     await message.answer(f'<b>Если у Вас возникли вопросы касательно:</b>\n\n'
+                         f'* Нарушений правил проекта'
                          f'* Работоспособности (баги, нарушения)\n'
                          f'* Усовершенствования бота\n'
                          f'* Адреса доставки сладких подарков (это очень поможет поддерживать бота)\n\n'
@@ -123,9 +125,11 @@ async def menu(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     buttons = ["Правила", "Ваши вопросы"]
     keyboard.add(*buttons)
-    buttons = ["Открытые вопросы", "Закрытые вопросы"]
+    buttons = ["Открытые вопросы", "Случайный вопрос"]
     keyboard.add(*buttons)
-    buttons = ["Администрация"]
+    buttons = ["Закрытые вопросы"]
+    keyboard.add(*buttons)
+    buttons = ["Техническая поддержка"]
     keyboard.add(*buttons)
     await message.answer("Главное меню", reply_markup=keyboard)
 
@@ -399,6 +403,32 @@ async def active_nav_handler(call: types.CallbackQuery):
 Блок кода с открытыми вопросами и действиями над ними.
 """
 
+@dp.message_handler(Text(equals="Случайный вопрос")) #сделать листалку по 5 вопросов на странице?
+async def open_questions(message: types.Message):
+    if message.from_user.id in banned_id:
+        reason = banned_reasons[banned_id.index(message.from_user.id)]
+        await message.answer(f"Вы заблокированы.\nПричина: {reason}\n\nПо вопросам аппеляции обращайтесь к администрации.")
+
+    else:
+        global userData
+        global page
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM questions WHERE status = false;")
+        userData = cursor.fetchall()
+        cursor.close()
+        if len(userData) == 0:
+            await message.answer(text='На данный момент нет открытых вопросов.')
+        else:
+            page = random.randint(0, (len(userData)-1))
+            row = userData[page]
+            username = await get_username(int(row[1]))
+            header = row[2]
+            question = row[3]
+            questionid = int(row[0])
+            form_text = f"<b>Случайный вопрос, автор: @{username}\nID Вопроса: {questionid}\n\n{header}</b>\n\n{question}"
+            keyboard = get_keyboard_navigation('open_random_nav', questionid, row[page])
+            await message.answer(text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+
 @dp.message_handler(Text(equals="Открытые вопросы")) #сделать листалку по 5 вопросов на странице?
 async def open_questions(message: types.Message):
     if message.from_user.id in banned_id:
@@ -457,7 +487,6 @@ async def open_questions_handler(call: types.CallbackQuery):
         else:
             questionid = int(action.split('.')[1])
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            print(userData)
             userData[0] = questionid
             cursor = conn.cursor()
             cursor.execute(f"SELECT * FROM questions WHERE id = {questionid};")

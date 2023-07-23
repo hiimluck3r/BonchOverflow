@@ -8,6 +8,10 @@ def get_keyboard_navigation(big_button, questionid, solutionid): #чувству
             types.InlineKeyboardButton(text='➡️', callback_data='open_goforward'),
             types.InlineKeyboardButton(text='Ответить', callback_data='open_answer.'+str(questionid))
         ]
+    elif big_button == 'open_random_nav': #кнопки навигации в "открытых вопросах"
+        buttons = [
+            types.InlineKeyboardButton(text='Ответить', callback_data='open_answer.'+str(questionid))
+        ]
     elif big_button == 'active_nav': #кнопки навигации в "активных вопросах" пользователя
         buttons = [
             types.InlineKeyboardButton(text='⬅️', callback_data='active_goback.'+str(questionid)),
