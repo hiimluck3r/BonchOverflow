@@ -1,5 +1,6 @@
-import psycopg2
 import sys
+import psycopg2
+import aiogram.utils.markdown as fmt
 
 from bot.dispatcher import dp, bot
 from aiogram import types
@@ -250,7 +251,7 @@ async def process_question(message: types.Message, state: FSMContext):
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         keyboard.add(*['Главное меню']) #на самом деле вопрос отображается не так, исправь
         await message.answer("Ваш вопрос будет отображаться подобным образом: \n\n"
-                            f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{data['header']}</b>\n\n{data['question']}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
+                            f"<b>Вопрос №n, автор: @{username}\nID Вопроса: {questionid}\n\n{fmt.quote_html(data['header'])}</b>\n\n{fmt.quote_html(['question'])}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found exception at process_question:', e)
 
@@ -366,6 +367,7 @@ async def active_nav_handler(call: types.CallbackQuery):
         cursor.execute(f"UPDATE questions SET solution = '{solution}' WHERE id = {questionid};")
         cursor.execute(f"UPDATE questions SET solverid = {solverid} WHERE id = {questionid};")
         cursor.execute(f"UPDATE questions SET status = True WHERE id = {questionid};")
+        cursor.execute(f"DELETE * FROM solutions WHERE questionid = {questionid};")
         conn.commit()
         cursor.close()
         await bot.send_message(chat_id=call.from_user.id, text="Вопрос закрыт.", parse_mode=types.ParseMode.HTML)
@@ -476,7 +478,7 @@ async def process_answer_invalid(message: types.Message):
 async def process_answer(message: types.Message, state: FSMContext):
     global userData
 
-    solution = message.text
+    solution = fmt.quote_html(message.text)
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["Главное меню", "Открытые вопросы"]
     keyboard.add(*buttons)
