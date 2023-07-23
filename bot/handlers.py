@@ -465,7 +465,7 @@ async def open_questions_handler(call: types.CallbackQuery):
             cursor.close()
 
             if flag:
-                keyboard.add(*['Открытые вопросы', 'Главное меню'])
+                keyboard.add(*['Главное меню', 'Открытые вопросы'])
                 await bot.send_message(chat_id=call.message.chat.id, text="Этот вопрос уже закрыт.", reply_markup=keyboard)
             else:
                 keyboard.add(*['Отмена'])
