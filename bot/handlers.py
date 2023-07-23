@@ -337,7 +337,7 @@ async def active_solutions_handler(call: types.CallbackQuery):
     userData = cursor.fetchall()
     cursor.close()
     if len(userData) == 0:
-        await bot.send_message(chat_id=call.from_user.id, text='На данный момент нет ответа на этот вопрос.\n\nВы можете ответить на вопрос самостоятельно через вкладку "Открытые вопросы", а после закрыть его.')
+        await bot.send_message(chat_id=call.from_user.id, text='На данный момент нет ответа на этот вопрос.\n\nВы можете ответить на вопрос самостоятельно через вкладку "Открытые вопросы", а после закрыть его, если уже нашли решение.')
     else:
         page = 0 #начиная с этого момента, Бог отказался от того, чтобы помогать мне в написании этого кода
         row = userData[page]
@@ -457,11 +457,20 @@ async def open_questions_handler(call: types.CallbackQuery):
         else:
             questionid = int(action.split('.')[1])
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            keyboard.add(*['Отмена'])
+            print(userData)
             userData[0] = questionid
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT * FROM questions WHERE id = {questionid};")
+            flag = cursor.fetchone()[4]
+            cursor.close()
 
-            await AnswerQuestion.solution.set()
-            await bot.send_message(chat_id=call.message.chat.id, text="Введите текст ответа:", reply_markup=keyboard)
+            if flag:
+                keyboard.add(*['Открытые вопросы', 'Главное меню'])
+                await bot.send_message(chat_id=call.message.chat.id, text="Этот вопрос уже закрыт.", reply_markup=keyboard)
+            else:
+                keyboard.add(*['Отмена'])
+                await AnswerQuestion.solution.set()
+                await bot.send_message(chat_id=call.message.chat.id, text="Введите текст ответа:", reply_markup=keyboard)
             await call.answer()
     except Exception as e:
         print('Found an exception in open questions handler:', e)
