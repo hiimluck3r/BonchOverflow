@@ -2,16 +2,15 @@ version: '3.9'
 services:
   db:
     container_name: pg_container
-    image: postgres:15
+    image: luck3rinc/bonchoverflow_db
     restart: always
     environment:
       POSTGRES_USER: dbusername
       POSTGRES_PASSWORD: dbpassword
-      POSTGRES_DB: bonchoverflow_db
+      POSTGRES_DB: db
     ports:
       - "5432:5432"
     volumes:
-      - ./postgresql:/docker-entrypoint-initdb.d
       - ./postgresql/data:/var/lib/postgresql/data
 
   pgadmin:
@@ -31,7 +30,7 @@ services:
     environment:
       API_TOKEN: yourtokenhere
       HOST: db
-      DB: bonchoverflow_db
+      DB: db
       USER: dbusername
       PWD: dbpassword
       ADMIN: yourtelegramid
@@ -50,3 +49,4 @@ services:
 
 volumes:
   logs:
+  postgresql:
