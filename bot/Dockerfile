@@ -5,9 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE 1
 
 WORKDIR ~/BonchOverflow
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r ./requirements.txt
-
-COPY bot ./bot
+COPY . ./bot
+RUN pip install --no-cache-dir -r ./bot/requirements.txt
 
 CMD ["python", "-m", "bot"]

@@ -2,6 +2,6 @@ FROM postgres:15
 
 WORKDIR /docker-entrypoint-initdb.d
 
-COPY ./postgresql/init.sql .
+COPY init.sql .
 
 CMD ["postgres"]
