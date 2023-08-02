@@ -520,8 +520,8 @@ async def process_answer(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["Главное меню", "Открытые вопросы"]
     keyboard.add(*buttons)
-    cursor = conn.cursor()
     try:
+        cursor = conn.cursor()
         cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
         data = cursor.fetchone()
         if data == None:
@@ -534,6 +534,7 @@ async def process_answer(message: types.Message, state: FSMContext):
         await message.answer(f"Решение внесено.\n\n<b>Текст решения</b>:\n{solution}", parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     except Exception as e:
         print('Found an exception at process_answer:', e)
+        await message.answer(f"Возникла непредвиденная ошибка.\n\nПожалуйста, сообщите об этом в техническую поддержку.", reply_markup=keyboard)
 
 """
 Блок кода с закрытыми вопросами и действиями над ними.
