@@ -2,11 +2,11 @@ version: '3.9'
 services:
   db:
     container_name: pg_container
-    build: ./postgresql
+    image: luck3rinc/bonchoverflow_db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: root
+      POSTGRES_USER: dbusername
+      POSTGRES_PASSWORD: dbpassword
       POSTGRES_DB: db
     ports:
       - "5432:5432"
@@ -18,22 +18,22 @@ services:
     image: dpage/pgadmin4
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: luck3rinc@yandex.ru
-      PGADMIN_DEFAULT_PASSWORD: 159664bcd
+      PGADMIN_DEFAULT_EMAIL: example@example.com
+      PGADMIN_DEFAULT_PASSWORD: yourpasswordhere
     ports:
       - "80:80"
 
   bonchoverflow:
     container_name: bonchoverflow_bot
-    build: ./bot
+    image: luck3rinc/bonchoverflow
     restart: on-failure
     environment:
-      API_TOKEN: 6627457146:AAFd54qjSqipblvYjwk2XFqvPuJZvM_Bxd4 #devbottoken, do not forget
+      API_TOKEN: yourtokenhere
       HOST: db
       DB: db
-      USER: postgres
-      PWD: root
-      ADMIN: 340772367
+      USER: dbusername
+      PWD: dbpassword
+      ADMIN: yourtelegramid
     volumes:
       - ./logs:/~/BonchOverflow/logs
     depends_on:
@@ -41,11 +41,11 @@ services:
 
   bonchoverflow_support:
     container_name: bonchoverflow_supportbot
-    build: ./support
+    image: luck3rinc/bonchoverflow_support
     restart: on-failure
     environment:
-      SUPPORT_TOKEN: 6280908264:AAGFqmsNDWDkhcuDXk7YODM4rQrQUOLheaE
-      ADMIN: 340772367
+      SUPPORT_TOKEN: yourtokenhere
+      ADMIN: yourtelegramid
 
 volumes:
   logs:

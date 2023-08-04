@@ -1,0 +1,15 @@
+FROM python:3.9-slim
+
+LABEL authors="hiimluck3r"
+
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
+
+WORKDIR ~/BonchOverflowSupport
+
+COPY requirements_support.txt ./requirements.txt
+RUN pip install --no-cache-dir -r ./requirements.txt
+
+COPY support ./support
+
+CMD ["python", "-m", "support"]
