@@ -12,13 +12,13 @@
 version: '3.9'
 services:
   db:
-    container_name: pg_container
-    image: postgres:15
+    container_name: db
+    image: luck3rinc/bonchoverflow_postgres
     restart: always
     environment:
-      POSTGRES_USER: dbusername
-      POSTGRES_PASSWORD: dbpassword
-      POSTGRES_DB: bonchoverflow_db
+      POSTGRES_USER: $USER
+      POSTGRES_PASSWORD: $PWD
+      POSTGRES_DB: db
     ports:
       - "5432:5432"
     volumes:
@@ -30,8 +30,8 @@ services:
     image: dpage/pgadmin4
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: example@example.com
-      PGADMIN_DEFAULT_PASSWORD: yourpasswordhere
+      PGADMIN_DEFAULT_EMAIL: $MAIL
+      PGADMIN_DEFAULT_PASSWORD: $PASSWORD
     ports:
       - "80:80"
 
@@ -40,12 +40,12 @@ services:
     image: luck3rinc/bonchoverflow
     restart: on-failure
     environment:
-      API_TOKEN: yourtokenhere
+      API_TOKEN: $API_TOKEN
       HOST: db
-      DB: bonchoverflow_db
-      USER: dbusername
-      PWD: dbpassword
-      ADMIN: yourtelegramid
+      DB: db
+      USER: $USER
+      PWD: $PWD
+      ADMIN: $ADMIN
     volumes:
       - ./logs:/~/BonchOverflow/logs
     depends_on:
@@ -56,8 +56,8 @@ services:
     image: luck3rinc/bonchoverflow_support
     restart: on-failure
     environment:
-      SUPPORT_TOKEN: yourtokenhere
-      ADMIN: yourtelegramid
+      SUPPORT_TOKEN: $SUPPORT_TOKEN
+      ADMIN: $ADMIN
 
 volumes:
   logs:
