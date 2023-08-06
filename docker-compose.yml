@@ -1,8 +1,8 @@
 version: '3.9'
 services:
   db:
-    container_name: pg_container
-    image: postgres:15
+    container_name: db
+    image: luck3rinc/bonchoverflow_db
     restart: always
     environment:
       POSTGRES_USER: $USER
