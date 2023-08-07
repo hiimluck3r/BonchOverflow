@@ -2,7 +2,7 @@ version: '3.9'
 services:
   db:
     container_name: db
-    image: luck3rinc/bonchoverflow_postgres
+    build: ./postgresql
     restart: always
     environment:
       POSTGRES_USER: $USER
@@ -26,7 +26,7 @@ services:
 
   bonchoverflow:
     container_name: bonchoverflow_bot
-    image: luck3rinc/bonchoverflow
+    build: ./bot
     restart: on-failure
     environment:
       API_TOKEN: $API_TOKEN
@@ -42,7 +42,7 @@ services:
 
   bonchoverflow_support:
     container_name: bonchoverflow_supportbot
-    image: luck3rinc/bonchoverflow_support
+    build: ./support
     restart: on-failure
     environment:
       SUPPORT_TOKEN: $SUPPORT_TOKEN
