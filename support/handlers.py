@@ -89,14 +89,14 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     if current_state is None:
         return
 
-    print(f'Cancelling state %r', current_state)
+    print('Cancelling state %r', current_state)
     await state.finish()
     await message.answer('Ввод данных остановлен.', reply_markup=keyboard)
 
 @dp.message_handler(Text("Отправить обращение"))
 async def send_ticket(message: types.Message):
     if message.from_user.id in banned_id:
-        await message.answer(f"Вы заблокированы.")
+        await message.answer("Вы заблокированы.")
 
     else:
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)

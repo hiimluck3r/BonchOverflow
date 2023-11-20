@@ -5,18 +5,31 @@ def get_keyboard_navigation(big_button, questionid, solutionid): #чувству
     if big_button == 'open_nav': #кнопки навигации в "открытых вопросах"
         buttons = [
             types.InlineKeyboardButton(text='⬅️', callback_data='open_goback'),
-            types.InlineKeyboardButton(text='➡️', callback_data='open_goforward'),
-            types.InlineKeyboardButton(text='Ответить', callback_data='open_answer.'+str(questionid))
+            types.InlineKeyboardButton(
+                text='➡️', callback_data='open_goforward'
+            ),
+            types.InlineKeyboardButton(
+                text='Ответить', callback_data=f'open_answer.{str(questionid)}'
+            ),
         ]
     elif big_button == 'open_random_nav': #кнопки навигации в "открытых вопросах"
         buttons = [
-            types.InlineKeyboardButton(text='Ответить', callback_data='open_answer.'+str(questionid))
+            types.InlineKeyboardButton(
+                text='Ответить', callback_data=f'open_answer.{str(questionid)}'
+            )
         ]
     elif big_button == 'active_nav': #кнопки навигации в "активных вопросах" пользователя
         buttons = [
-            types.InlineKeyboardButton(text='⬅️', callback_data='active_goback.'+str(questionid)),
-            types.InlineKeyboardButton(text='➡️', callback_data='active_goforward.'+str(questionid)),
-            types.InlineKeyboardButton(text='Отметить как решение', callback_data=f'active_clthr.{questionid}.{solutionid}')
+            types.InlineKeyboardButton(
+                text='⬅️', callback_data=f'active_goback.{str(questionid)}'
+            ),
+            types.InlineKeyboardButton(
+                text='➡️', callback_data=f'active_goforward.{str(questionid)}'
+            ),
+            types.InlineKeyboardButton(
+                text='Отметить как решение',
+                callback_data=f'active_clthr.{questionid}.{solutionid}',
+            ),
         ]
     elif big_button == 'closed_nav': #кнопки навигации в "закрытых вопросах"
         buttons = [
