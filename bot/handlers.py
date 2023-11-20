@@ -43,7 +43,7 @@ async def administration(message: types.Message):
 def get_banned(mode='update', userid=0, reason='0'):
     cursor = conn.cursor()
     if mode == 'update':
-        cursor.execute(f"SELECT * FROM banned;")
+        cursor.execute("SELECT * FROM banned;")
         banned_data = cursor.fetchall()
         banned_id = [int(row[1]) for row in banned_data]
         banned_reasons = [row[2] for row in banned_data]
@@ -53,7 +53,7 @@ def get_banned(mode='update', userid=0, reason='0'):
     elif mode == 'add':
         cursor.execute(f"SELECT * FROM banned WHERE userid = {userid};")
         data = cursor.fetchone()
-        if data == None:
+        if data is None:
             cursor.execute(f"INSERT INTO banned(userid, reason) VALUES ({userid}, '{reason}');")
         else:
             cursor.execute(f"UPDATE banned SET reason = '{reason}' WHERE userid = {userid};")
@@ -197,7 +197,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     if current_state is None:
         return
 
-    print(f'Cancelling state %r', current_state, file=sys.stderr)
+    print('Cancelling state %r', current_state, file=sys.stderr)
     await state.finish()
 
     await message.answer('Ввод данных остановлен.', reply_markup=keyboard)
@@ -242,7 +242,14 @@ async def process_question(message: types.Message, state: FSMContext):
 
         cursor = conn.cursor()
         if existingID == 0:
-            cursor.execute("INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ("+str(userid)+", "+"'"+data['header']+"'"+", '"+data['question']+"', false, 0, '') RETURNING id;")
+            cursor.execute(
+                f"INSERT INTO questions(userid, header, question, status, solverid, solution) VALUES ({str(userid)}, '"
+                + data['header']
+                + "'"
+                + ", '"
+                + data['question']
+                + "', false, 0, '') RETURNING id;"
+            )
             questionid = cursor.fetchone()[0]
         else:
             questionid = existingID
@@ -277,7 +284,11 @@ async def user_questions(message: types.Message):
             for i in range(questions_count):
                 header = questions[i][2]
                 questionid = questions[i][0]
-                keyboard.add(types.InlineKeyboardButton(text=header, callback_data = "act."+str(questionid)))
+                keyboard.add(
+                    types.InlineKeyboardButton(
+                        text=header, callback_data=f"act.{str(questionid)}"
+                    )
+                )
             await message.answer("На данный момент активны следующие вопросы:", reply_markup=keyboard)
         else:
             await message.answer("На данный момент нет активных вопросов.")
@@ -286,15 +297,14 @@ async def user_questions(message: types.Message):
 async def active_questions_handler(call: types.CallbackQuery):
     call_data = call.data[4::]
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM public.questions WHERE id = '+ call_data+";")
+    cursor.execute(f'SELECT * FROM public.questions WHERE id = {call_data};')
     data = cursor.fetchone()
     cursor.close()
     header = data[2]
     question_text = data[3]
-    form_text = "<b>"+str(header)+"</b>\n\n" \
-                    "Статус: открыт\n" \
-                    "Текст: "+str(question_text)+"\n\n" \
-                    "Желаете рассмотреть предложенные ответы?"
+    form_text = (
+        f"<b>{str(header)}" + "</b>\n\n" "Статус: открыт\n" "Текст: "
+    ) + str(question_text) + "\n\n" "Желаете рассмотреть предложенные ответы?"
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(types.InlineKeyboardButton(text="Да", callback_data=f"sol.{call_data}"))
     keyboard.add(types.InlineKeyboardButton(text="Изменить вопрос", callback_data=f"redact.{call_data}"))
@@ -314,7 +324,7 @@ async def redact_active_handler(call: types.CallbackQuery):
     cursor.execute(f"SELECT * FROM questions WHERE (id = {existingID} AND status = true);")
     existingRow = cursor.fetchone()
     cursor.close()
-    if existingRow == None:
+    if existingRow is None:
         try:
             await AskQuestion.header.set()
 
@@ -346,7 +356,14 @@ async def active_solutions_handler(call: types.CallbackQuery):
         page = 0 #начиная с этого момента, Бог отказался от того, чтобы помогать мне в написании этого кода
         row = userData[page]
         username = await get_username(int(row[2]))
-        form_text = f"<b>Решение №{page+1}, автор: @@"+username+"</b>\nID Ответа: "+str(row[0])+"\n\n" + str(row[3]) +"\n"
+        form_text = (
+            f"<b>Решение №{page + 1}, автор: @@{username}"
+            + "</b>\nID Ответа: "
+            + str(row[0])
+            + "\n\n"
+            + str(row[3])
+            + "\n"
+        )
         keyboard = get_keyboard_navigation('active_nav', call_data, row[2])
         await bot.send_message(chat_id=call.from_user.id, text=form_text, parse_mode=types.ParseMode.HTML, reply_markup=keyboard)
     await call.answer()
@@ -385,7 +402,14 @@ async def active_nav_handler(call: types.CallbackQuery):
                     page -= 1
                     row = userData[page]
                     username = await get_username(int(row[2]))
-                    form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                    form_text = (
+                        f"<b>Решение №{page + 1}, автор: @{username}"
+                        + "</b>\nID Ответа: "
+                        + str(row[0])
+                        + "\n\n"
+                        + str(row[3])
+                        + "\n"
+                    )
                     await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
 
             elif action == 'goforward':
@@ -393,7 +417,14 @@ async def active_nav_handler(call: types.CallbackQuery):
                     page += 1
                     row = userData[page]
                     username = await get_username(int(row[2]))
-                    form_text = f"<b>Решение №{page + 1}, автор: @" + username + "</b>\nID Ответа: " + str(row[0]) + "\n\n" + str(row[3]) + "\n"
+                    form_text = (
+                        f"<b>Решение №{page + 1}, автор: @{username}"
+                        + "</b>\nID Ответа: "
+                        + str(row[0])
+                        + "\n\n"
+                        + str(row[3])
+                        + "\n"
+                    )
                     await update_question_text(call.message, form_text, "active_nav", questionid, int(row[2]))
         except Exception as e: #я не имею ни малейшего понятия, как это дебажить через месяц, но оно выглядит красиво
             print("Found an exception in active questions handler:", e)
@@ -413,7 +444,7 @@ async def open_questions(message: types.Message):
         global userData
         global page
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM questions WHERE status = false;")
+        cursor.execute("SELECT * FROM questions WHERE status = false;")
         userData = cursor.fetchall()
         cursor.close()
         if len(userData) == 0:
@@ -439,7 +470,7 @@ async def open_questions(message: types.Message):
         global userData
         global page
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM questions WHERE status = false;")
+        cursor.execute("SELECT * FROM questions WHERE status = false;")
         userData = cursor.fetchall()
         cursor.close()
         if len(userData) == 0:
@@ -524,7 +555,7 @@ async def process_answer(message: types.Message, state: FSMContext):
         cursor = conn.cursor()
         cursor.execute(f"SELECT * FROM solutions WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
         data = cursor.fetchone()
-        if data == None:
+        if data is None:
             cursor.execute(f"INSERT INTO solutions(questionid, solverid, solution) VALUES ({userData[0]}, {message.from_user.id}, '{solution}');")
         else:
             cursor.execute(f"UPDATE solutions SET solution = '{solution}' WHERE (questionid = {userData[0]} AND solverid = {message.from_user.id});")
@@ -550,7 +581,7 @@ async def closed_questions(message: types.Message):
         global userData
         global page
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM questions WHERE status = true;")
+        cursor.execute("SELECT * FROM questions WHERE status = true;")
         userData = cursor.fetchall()
         cursor.close()
         if len(userData) == 0:
